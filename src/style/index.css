@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+/* Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+
+:root {
+  /* Light mode (default) */
+  --container-padding: 2rem;
+  --container-center: center;
+}
+
+@theme {
+  /* fonts */
+  --font-inter: "Inter", sans-serif;
+
+  /* colors */
+  --color-crimson: #cf1742;
+  --color-secondary: #152352;
+  --color-background: #ffffff;
+  --color-text-gray: #858585;
+  --color-crimson: #cf1742;
+  --color-border: #e5e7eb;
+  --color-card: #ffffff;
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --color-primary: #d15f27;
+
+  /* breakpoints */
+  --breakpoint-xs: 430px;
+  --breakpoint-sm: 600px;
+  --breakpoint-md: 760px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-lg10: 1280px;
+  --breakpoint-xl: 85rem;
+  --breakpoint-2xl: 85rem;
+}
+
+/* Add your container styles */
+.container {
+  margin: 0 auto;
+  padding: 0 var(--container-padding);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px transparent inset !important; /* Replace #000 with your desired color */
+  -webkit-text-fill-color: #000 !important; /* Optional: set text color */
+  transition: background-color 5000s ease-in-out 0s;
+}
