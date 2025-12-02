@@ -7,6 +7,7 @@ const Input = ({
   type = "text",
   className,
   inputClass,
+  mainWrapper,
   label,
   labelClass,
   onChange,
@@ -50,21 +51,27 @@ const Input = ({
     return current && current < dayjs().add(startDate, "day").startOf("day");
   };
 
-  const wrapperClass =
-    "relative flex items-center gap-3 rounded-md px-4 py-2.5   overflow-hidden outline outline-[#e9e9e9]";
-  const focusStyle =
-    "focus-within:outline focus-within:outline-[#308748] hover:outline-[#308748]";
-  const baseStyle = `w-full h-full bg-transparent border-none outline-none text-black text-sm font-light font-inter placeholder:text-[#e9e9e9] ${
+  const wrapperClass = `relative flex items-center gap-3 rounded-md px-3 py-2.5 overflow-hidden outline outline-[#e9e9e9] ${
+    errorMessage && "outline-crimson"
+  }`;
+  const hoverStyle = "hover:outline-[#308748]";
+  const focusStyle = "focus-within:outline focus-within:outline-[#308748] ";
+
+  const baseStyle = `w-full h-full bg-transparent border-none outline-none  ${
     icon && "pr-6"
   }`;
-
+  const typoStyle = `text-black text-sm font-light font-inter placeholder:font-light placeholder:text-[#e9e9e9] ${
+    errorMessage && "text-crimson placeholder:text-crimson"
+  }`;
   const errorInputClass =
     "bg-crimson/10 outline outline-crimson focus-within:outline focus-within:outline-[#308748]";
 
   return (
-    <div className={`flex flex-col gap-2 ${error ? "error" : ""} ${className}`}>
+    <div
+      className={`flex flex-col gap-2 ${error ? "error" : ""} ${mainWrapper}`}
+    >
       {label && (
-        <label className={`text-sm font-inter ${labelClass}`}>
+        <label className={`text-sm capitalize font-inter ${labelClass}`}>
           {label}
           {required && <span className="text-crimson"> *</span>}
         </label>
@@ -72,13 +79,13 @@ const Input = ({
 
       {type === "date" ? (
         <div
-          className={` ${wrapperClass} ${focusStyle}  ${className} ${
+          className={` ${wrapperClass} ${focusStyle} ${hoverStyle}  ${className} ${
             errorMessage && errorInputClass
           } ${disabled ? "bg-[#6b6b6b31]" : ""}`}
         >
           <DatePicker
             onChange={onChange}
-            className={`!p-0 focus:shadow-none focus:outline-none focus-within:outline-none focus-within:shadow-none ${inputClass}`}
+            className={`!p-0 focus:shadow-none focus:outline-none focus-within:outline-none focus-within:shadow-none ${baseStyle} ${inputClass}`}
             disabledDate={disablePastDates}
             rootClassName="!border-none !shadow-none !outline-none [&_input]:!leading-[0] [&_.ant-picker-input]:!shadow-none [&_.ant-picker-input]:!outline-none"
             classNames={{
@@ -91,7 +98,7 @@ const Input = ({
         </div>
       ) : (
         <div
-          className={`${wrapperClass} ${focusStyle} ${className} ${
+          className={`${wrapperClass} ${focusStyle} ${hoverStyle} ${className} ${
             errorMessage && errorInputClass
           } ${disabled ? "bg-[#6b6b6b31]" : ""}`}
         >
@@ -104,12 +111,12 @@ const Input = ({
             name={name}
             value={value}
             onChange={onChange}
-            className={`${baseStyle} ${inputClass}`}
+            className={`${baseStyle} ${typoStyle} ${inputClass}`}
             disabled={disabled}
             maxLength={maxLength}
             placeholder={placeholder}
           />
-          {/* <label className={`text-capitalize ${labelClass}`}>{placeholder}</label> */}
+
           {icon && (
             <img
               src={getInputIcon()}
@@ -120,9 +127,7 @@ const Input = ({
           )}
         </div>
       )}
-      {errorMessage && (
-        <p className="text-xs font-medium text-red-600">{errorMessage}</p>
-      )}
+      {errorMessage && <p className="text-sm text-crimson">{errorMessage}</p>}
     </div>
   );
 };
