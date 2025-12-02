@@ -1,7 +1,7 @@
 import Input from "./components/common/input";
 import Button from "./components/common/button";
 import CustomSelect from "./components/common/select";
-import { Checkbox } from "antd";
+import Checkbox from "./components/common/checkbox";
 
 const App = () => {
   return (
@@ -16,9 +16,7 @@ const App = () => {
       <Button text="Hello" variant="secondary" />
       <Button text="Hello wordl" variant="secondary" />
       <div>
-        <Checkbox>
-          <p className="text-sm">Check all</p>
-        </Checkbox>
+        <Checkbox label="Check all" />
       </div>
     </div>
   );
