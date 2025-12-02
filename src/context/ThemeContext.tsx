@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const ThemeContext = createContext({ isDark: false, toggle: () => { } });
 
-export const ThemeProvider = ({ children }) => {
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
 
     useEffect(() => {

@@ -6,30 +6,13 @@ const Button = ({
   img,
   className,
   onClick,
-  minHeight,
-  maxHeight,
-  minWidth,
-  height,
-  width,
   disabled,
   imgClass,
   loading = false,
-  maxWidth,
-  padding,
   variant = "primary",
 }) => {
-  const buttonStyle = {
-    minHeight,
-    maxHeight,
-    minWidth,
-    maxWidth,
-    height,
-    width,
-    padding,
-  };
-
   const baseClasses =
-    "flex justify-center items-center rounded-sm capitalize px-4 py-2.5 font-medium text-[15px] cursor-pointer font-montserrat transition-all duration-200 disabled:cursor-not-allowed";
+    "flex justify-center items-center rounded-sm capitalize  px-4 py-2.5 font-medium text-sm cursor-pointer font-montserrat transition-all duration-200 disabled:cursor-not-allowed";
 
   const variantClasses = {
     primary: "bg-[#C240CC] text-[#f2f2f2] hover:bg-[red] ",
@@ -44,7 +27,6 @@ const Button = ({
   return (
     <button
       className={`${baseClasses} ${variantClasses[variant]} ${className || ""}`}
-      style={buttonStyle}
       onClick={onClick}
       disabled={disabled}
     >
