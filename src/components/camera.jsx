@@ -95,8 +95,8 @@ const CameraDetection = () => {
           },
           runningMode: "VIDEO",
           numFaces: 1,
-          minHandDetectionConfidence: 0.3,
-          minHandPresenceConfidence: 0.3,
+          minFaceDetectionConfidence: 0.3,
+          minFacePresenceConfidence: 0.3,
           minTrackingConfidence: 0.3,
         });
 
