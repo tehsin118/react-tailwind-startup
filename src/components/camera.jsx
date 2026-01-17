@@ -110,6 +110,7 @@ const CameraDetection = () => {
     initializeFaceLandmarker();
   }, []);
 
+  // gsap
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
