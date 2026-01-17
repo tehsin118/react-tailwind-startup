@@ -360,12 +360,18 @@ const CameraDetection = () => {
         paddedLandmarks[i] = flattenedLandmarks[i];
       }
 
-      // Send landmark data to backend via WebSocket in the required format
+      // Convert canvas to base64 for video frame
+      const dataURL = canvas.toDataURL("image/jpeg", 0.8);
+      const base64Frame = dataURL.split(",")[1]; // Remove data:image/jpeg;base64, prefix
+
+      // Send both landmark data and video frame to backend
       const landmarkData = {
         type: "video_buffer",
+        frames: [base64Frame], // Array of base64 encoded frames
+        timestamp: Date.now(),
         buffer_id: `video_${Date.now()}`,
-        frame_count: frameCountRef.current,
-        data: [paddedLandmarks], // Array containing exactly 225 values
+        // frame_count: frameCountRef.current,
+        // landmarks: paddedLandmarks, // Include landmark data
       };
 
       sendMessage(JSON.stringify(landmarkData));
@@ -373,7 +379,7 @@ const CameraDetection = () => {
 
       console.log(`Frame #${frameCountRef.current} sent to backend`);
       console.log(
-        `Data length: ${paddedLandmarks.length} values (${allLandmarks.length} landmarks detected)`,
+        `Data: ${paddedLandmarks.length} landmark values, 1 base64 frame (${allLandmarks.length} landmarks detected)`,
       );
     }
   };
