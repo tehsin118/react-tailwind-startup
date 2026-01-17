@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
 import {
-  PoseLandmarker,
+  HandLandmarker,
+  FaceLandmarker,
   FilesetResolver,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
@@ -11,7 +12,8 @@ const CameraDetection = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const intervalRef = useRef(null);
-  const poseLandmarkerRef = useRef(null);
+  const handLandmarkerRef = useRef(null);
+  const faceLandmarkerRef = useRef(null);
   const drawingUtilsRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [messageHistory, setMessageHistory] = useState([]);
@@ -46,35 +48,66 @@ const CameraDetection = () => {
     }
   }, [lastMessage]);
 
-  // Initialize MediaPipe Pose Landmarker
+  // Initialize MediaPipe Hand Landmarker
   useEffect(() => {
-    const initializePoseLandmarker = async () => {
+    const initializeHandLandmarker = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
         );
 
-        const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        const handLandmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task",
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
             delegate: "GPU",
           },
           runningMode: "VIDEO",
-          numPoses: 6, // Detect up to 6 poses (6 * 33 = 198 landmarks, under 225 limit)
-          minPoseDetectionConfidence: 0.1, // Minimum threshold
-          minPosePresenceConfidence: 0.1, // Maximum sensitivity
-          minTrackingConfidence: 0.1, // Maximum tracking sensitivity
+          numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
+          minHandDetectionConfidence: 0.3,
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3,
         });
 
-        poseLandmarkerRef.current = poseLandmarker;
-        console.log("MediaPipe Pose Landmarker initialized");
+        handLandmarkerRef.current = handLandmarker;
+        console.log("MediaPipe Hand Landmarker initialized");
       } catch (error) {
         console.error("Error initializing MediaPipe:", error);
       }
     };
 
-    initializePoseLandmarker();
+    initializeHandLandmarker();
+  }, []);
+
+  // Initialize MediaPipe Face Landmarker
+  useEffect(() => {
+    const initializeFaceLandmarker = async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
+        );
+
+        const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          minHandDetectionConfidence: 0.3,
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3,
+        });
+
+        faceLandmarkerRef.current = faceLandmarker;
+        console.log("MediaPipe Face Landmarker initialized");
+      } catch (error) {
+        console.error("Error initializing Face Landmarker:", error);
+      }
+    };
+
+    initializeFaceLandmarker();
   }, []);
 
   const startCamera = async () => {
@@ -133,7 +166,8 @@ const CameraDetection = () => {
   const captureFrame = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    const poseLandmarker = poseLandmarkerRef.current;
+    const handLandmarker = handLandmarkerRef.current;
+    const faceLandmarker = faceLandmarkerRef.current;
 
     if (canvas && video && readyState === 1) {
       // Check if video is actually playing
@@ -150,15 +184,17 @@ const CameraDetection = () => {
       // Draw video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Detect pose landmarks if MediaPipe is initialized
+      // Detect hand and face landmarks
       let allLandmarks = [];
-      if (poseLandmarker) {
-        try {
-          const startTimeMs = performance.now();
-          const results = poseLandmarker.detectForVideo(video, startTimeMs);
+      const startTimeMs = performance.now();
 
-          // Process and log landmarks
-          if (results.landmarks && results.landmarks.length > 0) {
+      // Detect hands
+      if (handLandmarker) {
+        try {
+          const handResults = handLandmarker.detectForVideo(video, startTimeMs);
+
+          // Process and draw hand landmarks
+          if (handResults.landmarks && handResults.landmarks.length > 0) {
             setLandmarksDetected(true);
 
             // Initialize drawing utils if not already done
@@ -168,58 +204,123 @@ const CameraDetection = () => {
 
             const drawingUtils = drawingUtilsRef.current;
 
-            // Collect all landmarks from all detected poses
-            results.landmarks.forEach((landmarks, poseIndex) => {
-              // Draw landmarks and connections for each detected pose
+            // Collect all landmarks from all detected hands
+            handResults.landmarks.forEach((landmarks, handIndex) => {
+              // Draw landmarks and connections for each detected hand
               drawingUtils.drawLandmarks(landmarks, {
-                radius: (data) =>
-                  DrawingUtils.lerp(data.from.z, -0.15, 0.1, 5, 1),
+                radius: 5,
                 color: "#00FF00",
                 fillColor: "#FF0000",
               });
 
               drawingUtils.drawConnectors(
                 landmarks,
-                PoseLandmarker.POSE_CONNECTIONS,
+                HandLandmarker.HAND_CONNECTIONS,
                 {
                   color: "#00FF00",
                   lineWidth: 2,
                 },
               );
 
-              // Add each landmark to the array with pose index
+              // Add each landmark to the array with hand index
               landmarks.forEach((landmark, landmarkIndex) => {
                 allLandmarks.push({
-                  poseIndex,
+                  type: "hand",
+                  handIndex,
                   landmarkIndex,
                   x: landmark.x,
                   y: landmark.y,
                   z: landmark.z,
-                  visibility: landmark.visibility,
+                  visibility: landmark.visibility || 1.0,
                 });
               });
             });
 
-            // Enforce 225 landmark limit
-            if (allLandmarks.length > 225) {
-              allLandmarks = allLandmarks.slice(0, 225);
-            }
-
-            // Console log the landmark data
-            console.log("=== LANDMARK DETECTION DATA ===");
-            console.log(`Frame: #${frameCountRef.current}`);
-            console.log(`Total Poses Detected: ${results.landmarks.length}`);
-            console.log(`Total Landmarks: ${allLandmarks.length} (max: 225)`);
-            console.log(`Landmarks per pose: 33`);
-            console.log("Landmark Data:", allLandmarks);
-            console.log("================================");
-          } else {
-            setLandmarksDetected(false);
-            console.log("No pose landmarks detected in this frame");
+            console.log(
+              `Total Hands Detected: ${handResults.landmarks.length}`,
+            );
           }
         } catch (error) {
-          console.error("Error detecting pose:", error);
+          console.error("Error detecting hands:", error);
         }
+      }
+
+      // Detect face
+      if (faceLandmarker) {
+        try {
+          const faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
+
+          if (
+            faceResults.faceLandmarks &&
+            faceResults.faceLandmarks.length > 0
+          ) {
+            setLandmarksDetected(true);
+
+            if (!drawingUtilsRef.current) {
+              drawingUtilsRef.current = new DrawingUtils(context);
+            }
+
+            const drawingUtils = drawingUtilsRef.current;
+
+            // Expanded face landmarks for sign language (30 key points)
+            // Eyes, eyebrows, nose, mouth, chin - critical for ASL facial expressions
+            const keyFaceIndices = [
+              // Right eye (5 points)
+              33, 133, 160, 159, 158,
+              // Left eye (5 points)
+              362, 263, 387, 386, 385,
+              // Right eyebrow (3 points)
+              46, 52, 65,
+              // Left eyebrow (3 points)
+              276, 282, 295,
+              // Nose (5 points)
+              1, 2, 98, 327, 4,
+              // Mouth outer (8 points)
+              61, 291, 0, 17, 84, 314, 405, 375,
+              // Chin (1 point)
+              152,
+            ]; // Total: 30 landmarks
+
+            faceResults.faceLandmarks.forEach((faceLandmarks) => {
+              // Draw key face points
+              const keyPoints = keyFaceIndices
+                .map((i) => faceLandmarks[i])
+                .filter(Boolean);
+
+              drawingUtils.drawLandmarks(keyPoints, {
+                radius: 3,
+                color: "#00FFFF",
+                fillColor: "#FFFF00",
+              });
+
+              // Add key face landmarks to array
+              keyFaceIndices.forEach((faceIndex) => {
+                if (faceLandmarks[faceIndex]) {
+                  const landmark = faceLandmarks[faceIndex];
+                  allLandmarks.push({
+                    type: "face",
+                    landmarkIndex: faceIndex,
+                    x: landmark.x,
+                    y: landmark.y,
+                    z: landmark.z,
+                    visibility: landmark.visibility || 1.0,
+                  });
+                }
+              });
+            });
+
+            console.log(
+              `Face Detected with ${keyFaceIndices.length} key landmarks`,
+            );
+          }
+        } catch (error) {
+          console.error("Error detecting face:", error);
+        }
+      }
+
+      // Update detection status
+      if (allLandmarks.length === 0) {
+        setLandmarksDetected(false);
       }
 
       // Increment frame counter
@@ -235,9 +336,16 @@ const CameraDetection = () => {
       ]);
 
       // Debug logging
-      console.log(`Total landmarks collected: ${allLandmarks.length}`);
+      const handCount = allLandmarks.filter((l) => l.type === "hand").length;
+      const faceCount = allLandmarks.filter((l) => l.type === "face").length;
+      console.log("=== SIGN LANGUAGE DETECTION DATA ===");
+      console.log(`Frame: #${frameCountRef.current}`);
+      console.log(
+        `Hand landmarks: ${handCount} | Face landmarks: ${faceCount}`,
+      );
+      console.log(`Total landmarks: ${allLandmarks.length}`);
       console.log(`Flattened array length: ${flattenedLandmarks.length}`);
-      console.log(`First 20 values:`, flattenedLandmarks.slice(0, 20));
+      console.log("====================================");
 
       // Only send if we have landmarks detected
       if (flattenedLandmarks.length === 0) {
