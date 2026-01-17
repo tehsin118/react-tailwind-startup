@@ -198,6 +198,12 @@ const CameraDetection = () => {
       allFramesDataRef.current = [];
       setIsProcessingComplete(false);
 
+      // Reset frame counters
+      frameCountRef.current = 0;
+      setFrameCount(0);
+      fpsCounterRef.current = 0;
+      setActualFPS(0);
+
       videoRef.current.currentTime = 0; // Start from beginning
       videoRef.current.play();
       setIsVideoPlaying(true);
@@ -344,7 +350,9 @@ const CameraDetection = () => {
       clearInterval(intervalRef.current);
     }
 
-    // Reset FPS monitoring
+    // Reset FPS monitoring and frame counter
+    frameCountRef.current = 0;
+    setFrameCount(0);
     fpsCounterRef.current = 0;
     fpsStartTimeRef.current = performance.now();
     lastFrameTimeRef.current = performance.now();

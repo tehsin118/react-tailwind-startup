@@ -3,7 +3,8 @@ import gsap from "gsap";
 import { ScrollSmoother, ScrollTrigger } from "gsap/all";
 import Input from "./components/common/input";
 import Button from "./components/common/button";
-import CameraDetection from "./components/camera";
+import CameraDetection from "./components/card/camera";
+// import CameraDetection from "./components/camera";
 const App = () => {
   const lines = [
     "YOU MUST BE",
@@ -69,7 +70,7 @@ const App = () => {
       tl.fromTo(
         selector,
         { y: -50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 1 }
+        { y: 0, opacity: 1, duration: 1 },
       ).to(selector, {
         y: 50,
         opacity: 0,
@@ -82,6 +83,8 @@ const App = () => {
   }, []);
   return (
     <div className="bg-[#fff] h-screen p-32">
+      {/* <CameraDetection /> */}
+
       <CameraDetection />
     </div>
   );
