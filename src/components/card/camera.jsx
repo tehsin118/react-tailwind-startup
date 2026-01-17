@@ -27,12 +27,20 @@ const CameraDetection = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [actualFPS, setActualFPS] = useState(0);
   const [isProcessingComplete, setIsProcessingComplete] = useState(false);
+  const [videoQueue, setVideoQueue] = useState([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
+  const [currentRunNumber, setCurrentRunNumber] = useState(0);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [isProcessingStarted, setIsProcessingStarted] = useState(false);
+  const [processingLog, setProcessingLog] = useState([]);
   const frameCountRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const fpsCounterRef = useRef(0);
   const fpsStartTimeRef = useRef(0);
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
+  const currentRunNumberRef = useRef(0); // Track run number immediately
+  const currentVideoIndexRef = useRef(0); // Track current video index immediately
 
   const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
 
@@ -122,49 +130,164 @@ const CameraDetection = () => {
     initializeFaceLandmarker();
   }, []);
 
-  const handleVideoUpload = (event) => {
-    const file = event.target.files[0];
-    if (file && file.type.startsWith("video/")) {
-      setUploadedVideoFile(file);
-      setIsVideoMode(true);
+  // Function to save landmarks data as NPY-compatible JSON
+  const handleFolderUpload = (event) => {
+    const files = Array.from(event.target.files);
+    const videoFiles = files.filter((file) => file.type.startsWith("video/"));
 
-      // Load the video but don't auto-play
-      const url = URL.createObjectURL(file);
-      if (videoRef.current) {
-        videoRef.current.src = url;
-        videoRef.current.load();
-        videoRef.current.onloadedmetadata = () => {
-          setVideoDuration(videoRef.current.duration);
-          setCurrentTime(0);
-          setIsVideoPlaying(false);
-        };
+    if (videoFiles.length === 0) {
+      alert("No video files found in the selected folder.");
+      return;
+    }
 
-        // Update current time during playback
-        videoRef.current.ontimeupdate = () => {
-          setCurrentTime(videoRef.current.currentTime);
-        };
+    setVideoQueue(videoFiles);
+    setCurrentVideoIndex(0);
+    setCurrentRunNumber(0);
+    setProcessingLog([]);
+    setIsBatchProcessing(false);
+    setIsProcessingStarted(false);
+    setIsVideoMode(true);
 
-        // Handle video end
-        videoRef.current.onended = () => {
-          console.log("Video ended - processing complete");
-          setIsVideoPlaying(false);
-          setIsProcessingComplete(true);
+    console.log(`📁 Loaded ${videoFiles.length} videos for batch processing`);
+    console.log(`Click "Start Processing" to begin automated batch processing`);
+  };
 
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
+  // Start the batch processing
+  const startBatchProcessing = () => {
+    if (videoQueue.length === 0) {
+      alert("No videos in queue. Please select a folder first.");
+      return;
+    }
 
-          console.log(`✅ Processing Complete!`);
+    setIsBatchProcessing(true);
+    setIsProcessingStarted(true);
+    setCurrentVideoIndex(0);
+    currentVideoIndexRef.current = 0;
+    currentRunNumberRef.current = 1;
+    setCurrentRunNumber(1);
+    setProcessingLog([]);
+
+    console.log(
+      `🚀 Starting batch processing of ${videoQueue.length} videos...`,
+    );
+
+    // Start processing first video
+    loadVideoFromQueue(videoQueue[0]);
+  };
+
+  // Load a video from the queue
+  const loadVideoFromQueue = (file) => {
+    setUploadedVideoFile(file);
+    setIsVideoMode(true);
+
+    const url = URL.createObjectURL(file);
+    if (videoRef.current) {
+      videoRef.current.src = url;
+      videoRef.current.load();
+      videoRef.current.onloadedmetadata = () => {
+        setVideoDuration(videoRef.current.duration);
+        setCurrentTime(0);
+        setIsVideoPlaying(false);
+
+        console.log(
+          `📹 Video loaded: ${file.name}, Duration: ${videoRef.current.duration}s`,
+        );
+
+        // Auto-play for batch processing with longer delay
+        setTimeout(() => {
+          console.log(`▶️ Auto-playing video (Run ${currentRunNumber})...`);
+          playVideo();
+        }, 1000);
+      };
+
+      videoRef.current.ontimeupdate = () => {
+        setCurrentTime(videoRef.current.currentTime);
+      };
+
+      videoRef.current.onended = () => {
+        handleVideoEnd();
+      };
+    }
+  };
+
+  // Handle video end - check if we need second run or move to next video
+  const handleVideoEnd = () => {
+    console.log("Video ended - processing complete");
+    console.log(
+      `Current state: isBatchProcessing=${isBatchProcessing}, isProcessingStarted=${isProcessingStarted}, currentRunNumberRef=${currentRunNumberRef.current}, videoQueue.length=${videoQueue.length}, currentVideoIndex=${currentVideoIndex}`,
+    );
+    setIsVideoPlaying(false);
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Check if we have videos in queue to process
+    if (
+      videoQueue.length > 0 &&
+      currentVideoIndexRef.current < videoQueue.length
+    ) {
+      const currentVideo = videoQueue[currentVideoIndexRef.current];
+
+      // ALWAYS SAVE after video completes
+      const logMsg = `✅ ${currentVideo.name} - Complete (${allLandmarksDataRef.current.length} frames) - SAVING`;
+      console.log(logMsg);
+      setProcessingLog((prev) => [...prev, logMsg]);
+
+      // Save landmark data with video name
+      saveLandmarksForBatch(currentVideo.name);
+
+      // Move to next video using ref (immediate update)
+      currentVideoIndexRef.current = currentVideoIndexRef.current + 1;
+      const nextIndex = currentVideoIndexRef.current;
+
+      if (nextIndex < videoQueue.length) {
+        console.log(
+          `📹 Moving to video ${nextIndex + 1} of ${videoQueue.length}: ${videoQueue[nextIndex].name}`,
+        );
+        setCurrentVideoIndex(nextIndex);
+        currentRunNumberRef.current = 1;
+        setCurrentRunNumber(1);
+
+        setTimeout(() => {
           console.log(
-            `Total Frames Processed: ${allLandmarksDataRef.current.length}`,
+            `▶️ Loading video ${nextIndex + 1} of ${videoQueue.length}...`,
           );
-          console.log(
-            `Total Landmarks Data Collected: ${allLandmarksDataRef.current.length * 225} values`,
-          );
-          console.log(`You can now download the landmark files.`);
-        };
+          loadVideoFromQueue(videoQueue[nextIndex]);
+        }, 2000);
+      } else {
+        // All videos processed
+        const finalMsg = `🎉 BATCH PROCESSING COMPLETE! Processed ${videoQueue.length} videos.`;
+        console.log(finalMsg);
+        setProcessingLog((prev) => [...prev, finalMsg]);
+        setIsBatchProcessing(false);
+        setIsProcessingStarted(false);
+        setIsProcessingComplete(true);
       }
+    } else {
+      // Single video mode or batch mode fallback - ALWAYS SAVE THE FILE
+      console.warn("Fallback mode - saving file anyway");
+      console.log(`✅ Processing Complete!`);
+      console.log(
+        `Total Frames Processed: ${allLandmarksDataRef.current.length}`,
+      );
+      console.log(
+        `Total Landmarks Data Collected: ${allLandmarksDataRef.current.length * 225} values`,
+      );
+
+      // Save the file if we have data
+      if (allLandmarksDataRef.current.length > 0) {
+        const fileName =
+          videoQueue[currentVideoIndex]?.name ||
+          uploadedVideoFile?.name ||
+          "video";
+        console.log(`💾 Saving file: ${fileName}`);
+        saveLandmarksForBatch(fileName);
+      }
+
+      setIsProcessingComplete(true);
+      console.log(`You can now download the landmark files.`);
     }
   };
 
@@ -192,10 +315,22 @@ const CameraDetection = () => {
   };
 
   const playVideo = () => {
+    console.log(
+      `🎬 playVideo called - isVideoMode: ${isVideoMode}, isBatchProcessing: ${isBatchProcessing}, currentRunNumber: ${currentRunNumber}, currentRunNumberRef: ${currentRunNumberRef.current}`,
+    );
+
     if (videoRef.current && isVideoMode) {
-      // Reset data collection
-      allLandmarksDataRef.current = [];
-      allFramesDataRef.current = [];
+      // Only reset data on first run (Run 1), keep data on Run 2
+      if (currentRunNumberRef.current === 1) {
+        console.log("🔄 First run - resetting all data");
+        allLandmarksDataRef.current = [];
+        allFramesDataRef.current = [];
+      } else {
+        console.log(
+          `🔄 Run ${currentRunNumber} - keeping existing data (${allLandmarksDataRef.current.length} frames)`,
+        );
+      }
+
       setIsProcessingComplete(false);
 
       // Reset frame counters
@@ -205,10 +340,50 @@ const CameraDetection = () => {
       setActualFPS(0);
 
       videoRef.current.currentTime = 0; // Start from beginning
-      videoRef.current.play();
-      setIsVideoPlaying(true);
-      setIsCameraActive(true);
-      startFrameCapture();
+
+      console.log(`⏪ Video reset to 0:00, attempting to play...`);
+
+      // Use promise-based play with error handling
+      const playPromise = videoRef.current.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log("✅ Video playback started successfully");
+            setIsVideoPlaying(true);
+            setIsCameraActive(true);
+            startFrameCapture();
+          })
+          .catch((error) => {
+            console.error("❌ Error playing video:", error);
+            // Always retry for batch processing
+            setTimeout(() => {
+              console.log("🔄 Retrying video playback...");
+              videoRef.current
+                .play()
+                .then(() => {
+                  console.log("✅ Retry successful!");
+                  setIsVideoPlaying(true);
+                  setIsCameraActive(true);
+                  startFrameCapture();
+                })
+                .catch((retryError) => {
+                  console.error("❌ Retry failed:", retryError);
+                  alert(
+                    "Failed to play video. Please check console for details.",
+                  );
+                });
+            }, 1000);
+          });
+      } else {
+        setIsVideoPlaying(true);
+        setIsCameraActive(true);
+        startFrameCapture();
+      }
+    } else {
+      console.warn(
+        `⚠️ playVideo conditions not met - videoRef: ${!!videoRef.current}, isVideoMode: ${isVideoMode}`,
+      );
     }
   };
 
@@ -250,6 +425,63 @@ const CameraDetection = () => {
     );
   };
 
+  // Save landmarks for batch processing with video name
+  const saveLandmarksForBatch = (videoName) => {
+    console.log("🔵 saveLandmarksForBatch called with:", videoName);
+    console.log(
+      "🔵 Landmarks data length:",
+      allLandmarksDataRef.current.length,
+    );
+
+    if (allLandmarksDataRef.current.length === 0) {
+      console.warn("⚠️ No landmark data to save for", videoName);
+      return;
+    }
+
+    try {
+      // Remove file extension and add landmarks prefix
+      const baseName = videoName.replace(/\.[^/.]+$/, "");
+      console.log("🔵 Base name:", baseName);
+
+      const npyData = {
+        shape: [allLandmarksDataRef.current.length, 225],
+        dtype: "float32",
+        data: allLandmarksDataRef.current,
+        metadata: {
+          video_name: videoName,
+          total_frames: allLandmarksDataRef.current.length,
+          fps: actualFPS,
+          timestamp: new Date().toISOString(),
+          run_number: currentRunNumberRef.current,
+        },
+      };
+
+      console.log("🔵 Creating blob...");
+      const jsonBlob = new Blob([JSON.stringify(npyData, null, 2)], {
+        type: "application/json",
+      });
+
+      console.log("🔵 Creating download link...");
+      const url = URL.createObjectURL(jsonBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${baseName}.json`;
+      document.body.appendChild(link);
+
+      console.log("🔵 Triggering download...");
+      link.click();
+
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log(
+        `💾 ✅ SAVED: ${baseName}.json (${allLandmarksDataRef.current.length} frames)`,
+      );
+    } catch (error) {
+      console.error("❌ Error saving landmarks:", error);
+    }
+  };
+
   // Function to save all frames data
   const saveAllFramesData = () => {
     if (allFramesDataRef.current.length === 0) {
@@ -289,59 +521,41 @@ const CameraDetection = () => {
     setTimeout(() => saveAllFramesData(), 500); // Small delay to prevent browser blocking
   };
 
-  const pauseVideo = () => {
-    if (videoRef.current && isVideoMode) {
-      videoRef.current.pause();
-      setIsVideoPlaying(false);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-  };
-
-  const stopCamera = () => {
+  const stopProcessing = () => {
     if (videoRef.current) {
-      // Stop camera stream if active
-      if (videoRef.current.srcObject) {
-        const tracks = videoRef.current.srcObject.getTracks();
-        tracks.forEach((track) => track.stop());
-        videoRef.current.srcObject = null;
-      }
-
-      // Stop uploaded video if active
-      if (isVideoMode) {
-        videoRef.current.pause();
-        videoRef.current.src = "";
-        setUploadedVideoFile(null);
-        setIsVideoMode(false);
-        setIsVideoPlaying(false);
-        setVideoDuration(0);
-        setCurrentTime(0);
-      }
-
-      setIsCameraActive(false);
-
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-
-      // Reset frame counter and FPS monitoring
-      frameCountRef.current = 0;
-      setFrameCount(0);
-      fpsCounterRef.current = 0;
-      setActualFPS(0);
-      lastFrameTimeRef.current = 0;
-      fpsStartTimeRef.current = 0;
-
-      // Clear collected data if stopping completely
-      if (!isVideoMode) {
-        allLandmarksDataRef.current = [];
-        allFramesDataRef.current = [];
-        setIsProcessingComplete(false);
-      }
+      videoRef.current.pause();
+      videoRef.current.src = "";
     }
+
+    setUploadedVideoFile(null);
+    setIsVideoMode(false);
+    setIsVideoPlaying(false);
+    setIsCameraActive(false);
+    setIsBatchProcessing(false);
+    setIsProcessingStarted(false);
+    setVideoQueue([]);
+    setCurrentVideoIndex(0);
+    setCurrentRunNumber(0);
+    setVideoDuration(0);
+    setCurrentTime(0);
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Reset frame counter and FPS monitoring
+    frameCountRef.current = 0;
+    setFrameCount(0);
+    fpsCounterRef.current = 0;
+    setActualFPS(0);
+    lastFrameTimeRef.current = 0;
+    fpsStartTimeRef.current = 0;
+
+    allLandmarksDataRef.current = [];
+    allFramesDataRef.current = [];
+    setIsProcessingComplete(false);
+    setProcessingLog([]);
   };
 
   const startFrameCapture = () => {
@@ -631,7 +845,7 @@ const CameraDetection = () => {
 
   useEffect(() => {
     return () => {
-      stopCamera();
+      stopProcessing();
     };
   }, []);
 
@@ -639,47 +853,27 @@ const CameraDetection = () => {
     <>
       <div className="baseCard flex flex-col gap-5 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Camera Detection</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Frames: </span>
-              <span className="text-sm font-semibold text-blue-500">
-                {frameCount}
-              </span>
-            </div>
-            {isCameraActive && (
+          <h2 className="text-xl font-semibold">
+            Batch Video Processing - Landmark Extraction
+          </h2>
+          {isBatchProcessing && (
+            <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
-                <span className="text-sm">FPS: </span>
-                <span className="text-sm font-semibold text-purple-500">
-                  {actualFPS}
+                <span>WebSocket:</span>
+                <span
+                  className={`font-semibold ${
+                    connectionStatus === "Connected"
+                      ? "text-green-500"
+                      : connectionStatus === "Error"
+                        ? "text-red-500"
+                        : "text-gray-500"
+                  }`}
+                >
+                  {connectionStatus}
                 </span>
               </div>
-            )}
-            <div className="flex items-center gap-2">
-              <span className="text-sm">WebSocket: </span>
-              <span
-                className={`text-sm font-semibold ${
-                  connectionStatus === "Connected"
-                    ? "text-green-500"
-                    : connectionStatus === "Error"
-                      ? "text-red-500"
-                      : "text-gray-500"
-                }`}
-              >
-                {connectionStatus}
-              </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Landmarks: </span>
-              <span
-                className={`text-sm font-semibold ${
-                  landmarksDetected ? "text-green-500" : "text-gray-500"
-                }`}
-              >
-                {landmarksDetected ? "Detected" : "None"}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -687,6 +881,7 @@ const CameraDetection = () => {
             <video
               ref={videoRef}
               playsInline
+              muted
               className={`border-2 border-gray-300 rounded-lg w-full ${isVideoMode ? "block" : "hidden"}`}
               style={{ maxWidth: "640px", height: "auto" }}
             />
@@ -710,125 +905,117 @@ const CameraDetection = () => {
             )}
           </div>
 
-          {/* Video Info and Controls */}
-          {isVideoMode && uploadedVideoFile && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm text-gray-600">
-                  <p>
-                    <strong>Video:</strong> {uploadedVideoFile.name}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {formatTime(videoDuration)}
-                  </p>
-                </div>
-                <div className="text-lg font-mono text-blue-600">
+          {/* Video is hidden - only shows during batch processing */}
+          {isVideoMode && uploadedVideoFile && isBatchProcessing && (
+            <div className="bg-gray-50 p-2 rounded-lg">
+              <div className="text-xs text-gray-600">
+                <p>
+                  <strong>Current:</strong> {uploadedVideoFile.name} -{" "}
                   {formatTime(currentTime)} / {formatTime(videoDuration)}
-                </div>
+                </p>
               </div>
-
-              <div className="flex gap-3 flex-wrap">
-                {!isVideoPlaying ? (
-                  <button
-                    onClick={playVideo}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    <Icon icon="mdi:play" className="text-xl" />
-                    Play Video
-                  </button>
-                ) : (
-                  <button
-                    onClick={pauseVideo}
-                    className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
-                  >
-                    <Icon icon="mdi:pause" className="text-xl" />
-                    Pause Video
-                  </button>
-                )}
-                <button
-                  onClick={stopCamera}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  <Icon icon="mdi:stop" className="text-xl" />
-                  Stop & Remove Video
-                </button>
-              </div>
-
-              {/* Download buttons - shown after processing complete */}
-              {isProcessingComplete &&
-                allLandmarksDataRef.current.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-300">
-                    <div className="mb-2">
-                      <p className="text-sm font-semibold text-green-600 mb-1">
-                        ✅ Processing Complete! (
-                        {allLandmarksDataRef.current.length} frames)
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Download landmark data as NPY-compatible JSON files
-                      </p>
-                    </div>
-                    <div className="flex gap-3 flex-wrap">
-                      <button
-                        onClick={saveLandmarksAsNPY}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
-                      >
-                        <Icon icon="mdi:download" className="text-xl" />
-                        Download Landmarks (NPY)
-                      </button>
-                      <button
-                        onClick={saveAllFramesData}
-                        className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
-                      >
-                        <Icon icon="mdi:file-download" className="text-xl" />
-                        Download All Frames
-                      </button>
-                      <button
-                        onClick={downloadAllData}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
-                      >
-                        <Icon
-                          icon="mdi:download-multiple"
-                          className="text-xl"
-                        />
-                        Download Both Files
-                      </button>
-                    </div>
-                  </div>
-                )}
             </div>
           )}
 
-          {!isVideoMode && (
+          {!isVideoMode && !isBatchProcessing && (
             <div className="flex gap-3 flex-wrap">
-              {!isCameraActive ? (
-                <>
-                  <button
-                    onClick={startCamera}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    <Icon icon="mdi:camera" className="text-xl" />
-                    Start Camera
-                  </button>
-                  <label className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors cursor-pointer">
-                    <Icon icon="mdi:video-plus" className="text-xl" />
-                    Upload Video
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleVideoUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </>
-              ) : (
+              <label className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors cursor-pointer">
+                <Icon icon="mdi:folder-multiple-image" className="text-xl" />
+                Select Folder for Batch Processing
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFolderUpload}
+                  className="hidden"
+                  webkitdirectory=""
+                  directory=""
+                  multiple
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Show video queue and Start Processing button */}
+          {videoQueue.length > 0 && !isProcessingStarted && (
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <div className="mb-3">
+                <h3 className="font-semibold text-green-800 mb-2">
+                  📁 {videoQueue.length} Videos Ready
+                </h3>
+                <div className="max-h-32 overflow-y-auto bg-white p-2 rounded border border-green-100 mb-3">
+                  {videoQueue.map((video, idx) => (
+                    <div key={idx} className="text-xs text-gray-700 py-1">
+                      {idx + 1}. {video.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={startBatchProcessing}
+                className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+              >
+                <Icon icon="mdi:play-circle" className="text-2xl" />
+                Start Processing ({videoQueue.length} videos × 2 runs each)
+              </button>
+            </div>
+          )}
+
+          {/* Batch Processing Status */}
+          {isBatchProcessing && isProcessingStarted && (
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-blue-800 mb-1">
+                    📹 Batch Processing Active
+                  </h3>
+                  <p className="text-sm text-blue-600">
+                    Video {currentVideoIndex + 1} of {videoQueue.length} - Run{" "}
+                    {currentRunNumber} of 2
+                  </p>
+                  <p className="text-xs text-blue-500 mt-1">
+                    Current: {uploadedVideoFile?.name}
+                  </p>
+                </div>
                 <button
-                  onClick={stopCamera}
+                  onClick={stopProcessing}
                   className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   <Icon icon="mdi:stop" className="text-xl" />
-                  Stop Camera
+                  Stop
                 </button>
-              )}
+              </div>
+              <div className="max-h-40 overflow-y-auto bg-white p-2 rounded border border-blue-100 mb-3">
+                {processingLog.map((log, idx) => (
+                  <div
+                    key={idx}
+                    className="text-xs text-gray-700 py-1 border-b border-gray-100 last:border-0"
+                  >
+                    {log}
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-gray-600">
+                <div className="flex gap-4">
+                  <span>
+                    Frames:{" "}
+                    <strong className="text-blue-600">{frameCount}</strong>
+                  </span>
+                  <span>
+                    FPS:{" "}
+                    <strong className="text-purple-600">{actualFPS}</strong>
+                  </span>
+                  <span>
+                    Landmarks:{" "}
+                    <strong
+                      className={
+                        landmarksDetected ? "text-green-600" : "text-gray-400"
+                      }
+                    >
+                      {landmarksDetected ? "Detected" : "None"}
+                    </strong>
+                  </span>
+                </div>
+              </div>
             </div>
           )}
         </div>
