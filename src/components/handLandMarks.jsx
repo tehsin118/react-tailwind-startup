@@ -127,6 +127,7 @@ const HandLandMarks = () => {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        setIsVideoMode(true);
 
         videoRef.current.onloadedmetadata = () => {
           startFrameCapture();
@@ -150,27 +151,32 @@ const HandLandMarks = () => {
 
       videoRef.current.currentTime = 0;
 
+      // Wait for video to actually start playing before capturing frames
+      const handlePlaying = () => {
+        console.log("✅ Video is now playing - starting frame capture");
+        setIsVideoPlaying(true);
+        startFrameCapture();
+        videoRef.current.removeEventListener("playing", handlePlaying);
+      };
+
+      videoRef.current.addEventListener("playing", handlePlaying);
+
       const playPromise = videoRef.current.play();
 
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            console.log("✅ Video playback started successfully");
-            setIsVideoPlaying(true);
-            startFrameCapture();
+            console.log("✅ Video play() promise resolved");
           })
           .catch((error) => {
             console.error("❌ Error playing video:", error);
+            videoRef.current.removeEventListener("playing", handlePlaying);
             setTimeout(() => {
-              videoRef.current
-                .play()
-                .then(() => {
-                  setIsVideoPlaying(true);
-                  startFrameCapture();
-                })
-                .catch((retryError) => {
-                  console.error("❌ Retry failed:", retryError);
-                });
+              videoRef.current.addEventListener("playing", handlePlaying);
+              videoRef.current.play().catch((retryError) => {
+                console.error("❌ Retry failed:", retryError);
+                videoRef.current.removeEventListener("playing", handlePlaying);
+              });
             }, 1000);
           });
       }
@@ -224,7 +230,7 @@ const HandLandMarks = () => {
 
     intervalRef.current = setInterval(() => {
       captureFrame();
-    }, 33); // ~30 FPS
+    }, 30); // ~30 FPS
   };
 
   const captureFrame = () => {
@@ -341,7 +347,7 @@ const HandLandMarks = () => {
         frame_count: landmarkData.frame_count,
         landmarks_length: landmarkData.landmarks.length,
         landmarks_data: landmarkData.landmarks,
-        landmarks_sample: landmarkData.landmarks.slice(0, 12),
+        // landmarks_sample: landmarkData.landmarks.slice(0, 12),
       });
       console.log(
         `✅ Data sent: ${paddedLandmarks.length} landmark values (${allLandmarks.length} detected landmarks)`,
@@ -401,7 +407,6 @@ const HandLandMarks = () => {
               ref={videoRef}
               playsInline
               muted
-              autoPlay
               className={`border-2 border-gray-300 rounded-lg w-full ${isVideoMode ? "block" : "hidden"}`}
               style={{ maxWidth: "640px", height: "auto" }}
             />
