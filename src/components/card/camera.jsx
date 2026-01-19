@@ -524,7 +524,7 @@ const CameraDetection = () => {
 
     // Create NPY-compatible data structure
     const npyData = {
-        shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
+      shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
       dtype: "float32",
       data: allLandmarksDataRef.current,
       metadata: {
@@ -535,7 +535,7 @@ const CameraDetection = () => {
         landmarks_breakdown: {
           hand_landmarks: 42,
           coordinates_per_landmark: 3,
-            total_values: 126,
+          total_values: 126,
         },
       },
     };
@@ -582,7 +582,7 @@ const CameraDetection = () => {
       console.log(`🔵 Saving to folder: ${folderName}, file: ${baseName}.json`);
 
       const npyData = {
-          shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
+        shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
         dtype: "float32",
         data: allLandmarksDataRef.current,
         metadata: {
@@ -595,7 +595,7 @@ const CameraDetection = () => {
           landmarks_breakdown: {
             hand_landmarks: 42,
             coordinates_per_landmark: 3,
-              total_values: 126,
+            total_values: 126,
           },
         },
       };
@@ -786,9 +786,9 @@ const CameraDetection = () => {
       // Draw video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Detect hand landmarks
-        let allLandmarks = [];
-        const startTimeMs = performance.now();
+      // Detect hand landmarks
+      let allLandmarks = [];
+      const startTimeMs = performance.now();
 
       // Detect hands
       if (handLandmarker) {
@@ -870,7 +870,7 @@ const CameraDetection = () => {
       console.log("=== FRAME PROCESSING DATA ===");
       console.log(`Frame: #${frameCountRef.current} | FPS: ${actualFPS}`);
       console.log(`Processing Time: ${deltaTime.toFixed(1)}ms`);
-        console.log(`Hand landmarks: ${handCount}`);
+      console.log(`Hand landmarks: ${handCount}`);
       console.log(`Total landmarks: ${allLandmarks.length}`);
       console.log(`Flattened array length: ${flattenedLandmarks.length}`);
 
@@ -882,9 +882,9 @@ const CameraDetection = () => {
 
       // Calculate total landmark values
       // Hand landmarks: 42 (21 × 2 hands) × 3 coords = 126 values
-        const totalLandmarkValues = 42 * 3; // 126 values
+      const totalLandmarkValues = 42 * 3; // 126 values
 
-        // Ensure exactly 126 values (pad with zeros if needed, truncate if exceeds)
+      // Ensure exactly 126 values (pad with zeros if needed, truncate if exceeds)
       const paddedLandmarks = new Array(totalLandmarkValues).fill(0);
       for (
         let i = 0;

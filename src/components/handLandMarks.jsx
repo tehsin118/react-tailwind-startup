@@ -1,22 +1,14 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
-import {
-  HandLandmarker,
-  FilesetResolver,
-  DrawingUtils,
-} from "@mediapipe/tasks-vision";
+import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 const HandLandMarks = () => {
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const intervalRef = useRef(null);
   const handLandmarkerRef = useRef(null);
-  const drawingUtilsRef = useRef(null);
-  const [isCameraActive, setIsCameraActive] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [uploadedVideoFile, setUploadedVideoFile] = useState(null);
-  const [messageHistory, setMessageHistory] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
   const [frameCount, setFrameCount] = useState(0);
   const [landmarksDetected, setLandmarksDetected] = useState(false);
@@ -32,7 +24,7 @@ const HandLandMarks = () => {
 
   const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
+  const { sendMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
       console.log("WebSocket connected");
       setConnectionStatus("Connected");
@@ -47,13 +39,6 @@ const HandLandMarks = () => {
     },
     shouldReconnect: () => true,
   });
-
-  useEffect(() => {
-    if (lastMessage !== null) {
-      console.log("Received message:", lastMessage.data);
-      setMessageHistory((prev) => prev.concat(lastMessage));
-    }
-  }, [lastMessage]);
 
   // Initialize MediaPipe Hand Landmarker
   useEffect(() => {
@@ -71,9 +56,9 @@ const HandLandMarks = () => {
           },
           runningMode: "VIDEO",
           numHands: 2,
-          minHandDetectionConfidence: 0.3,
-          minHandPresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
+          //   minHandDetectionConfidence: 0.3,
+          //   minHandPresenceConfidence: 0.3,
+          //   minTrackingConfidence: 0.3,
         });
 
         handLandmarkerRef.current = handLandmarker;
@@ -122,7 +107,6 @@ const HandLandMarks = () => {
   const handleVideoEnd = () => {
     console.log("Video ended - processing complete");
     setIsVideoPlaying(false);
-    setIsCameraActive(false);
     setLandmarksDetected(false);
 
     if (intervalRef.current) {
@@ -143,7 +127,6 @@ const HandLandMarks = () => {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        setIsCameraActive(true);
 
         videoRef.current.onloadedmetadata = () => {
           startFrameCapture();
@@ -174,7 +157,6 @@ const HandLandMarks = () => {
           .then(() => {
             console.log("✅ Video playback started successfully");
             setIsVideoPlaying(true);
-            setIsCameraActive(true);
             startFrameCapture();
           })
           .catch((error) => {
@@ -184,7 +166,6 @@ const HandLandMarks = () => {
                 .play()
                 .then(() => {
                   setIsVideoPlaying(true);
-                  setIsCameraActive(true);
                   startFrameCapture();
                 })
                 .catch((retryError) => {
@@ -212,7 +193,6 @@ const HandLandMarks = () => {
     setUploadedVideoFile(null);
     setIsVideoMode(false);
     setIsVideoPlaying(false);
-    setIsCameraActive(false);
     setLandmarksDetected(false);
     setVideoDuration(0);
     setCurrentTime(0);
@@ -248,11 +228,10 @@ const HandLandMarks = () => {
   };
 
   const captureFrame = () => {
-    const canvas = canvasRef.current;
     const video = videoRef.current;
     const handLandmarker = handLandmarkerRef.current;
 
-    if (canvas && video && readyState === 1) {
+    if (video && readyState === 1) {
       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
         console.warn("Video not ready yet");
         return;
@@ -271,10 +250,6 @@ const HandLandMarks = () => {
         fpsStartTimeRef.current = currentTime;
       }
 
-      const context = canvas.getContext("2d");
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
       let allLandmarks = [];
       const startTimeMs = performance.now();
 
@@ -286,28 +261,7 @@ const HandLandMarks = () => {
           if (handResults.landmarks && handResults.landmarks.length > 0) {
             setLandmarksDetected(true);
 
-            if (!drawingUtilsRef.current) {
-              drawingUtilsRef.current = new DrawingUtils(context);
-            }
-
-            const drawingUtils = drawingUtilsRef.current;
-
             handResults.landmarks.forEach((landmarks, handIndex) => {
-              drawingUtils.drawLandmarks(landmarks, {
-                radius: 5,
-                color: "#00FF00",
-                fillColor: "#FF0000",
-              });
-
-              drawingUtils.drawConnectors(
-                landmarks,
-                HandLandmarker.HAND_CONNECTIONS,
-                {
-                  color: "#00FF00",
-                  lineWidth: 2,
-                },
-              );
-
               landmarks.forEach((landmark, landmarkIndex) => {
                 allLandmarks.push({
                   type: "hand",
@@ -367,9 +321,6 @@ const HandLandMarks = () => {
         paddedLandmarks[i] = flattenedLandmarks[i];
       }
 
-      const dataURL = canvas.toDataURL("image/jpeg", 0.8);
-      const base64Frame = dataURL.split(",")[1];
-
       allLandmarksDataRef.current.push([...paddedLandmarks]);
 
       const landmarkData = {
@@ -389,7 +340,7 @@ const HandLandMarks = () => {
         buffer_id: landmarkData.buffer_id,
         frame_count: landmarkData.frame_count,
         landmarks_length: landmarkData.landmarks.length,
-        landmarkData: landmarkData,
+        landmarks_data: landmarkData.landmarks,
         landmarks_sample: landmarkData.landmarks.slice(0, 12),
       });
       console.log(
@@ -450,17 +401,11 @@ const HandLandMarks = () => {
               ref={videoRef}
               playsInline
               muted
-              className={`border-2 border-gray-300 rounded-lg w-full ${isCameraActive || isVideoMode ? "block" : "hidden"}`}
+              autoPlay
+              className={`border-2 border-gray-300 rounded-lg w-full ${isVideoMode ? "block" : "hidden"}`}
               style={{ maxWidth: "640px", height: "auto" }}
             />
-            <canvas
-              ref={canvasRef}
-              width="640"
-              height="480"
-              className={`absolute top-0 left-0 w-full pointer-events-none ${isCameraActive || isVideoMode ? "block" : "hidden"}`}
-              style={{ maxWidth: "640px", height: "auto" }}
-            />
-            {!isCameraActive && !isVideoMode && (
+            {!isVideoMode && (
               <div className="h-48 inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
                 <div className="text-center">
                   <Icon
@@ -505,7 +450,7 @@ const HandLandMarks = () => {
             </div>
           )}
 
-          {!isCameraActive && !isVideoMode && (
+          {!isVideoMode && (
             <div className="flex gap-3 flex-wrap">
               <button
                 onClick={startCamera}
@@ -527,15 +472,15 @@ const HandLandMarks = () => {
             </div>
           )}
 
-          {isCameraActive && !isVideoMode && (
+          {isVideoMode && !isVideoPlaying && uploadedVideoFile && (
             <div className="bg-green-50 p-4 rounded-lg border border-green-200">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-green-800 mb-1">
-                    📹 Live Camera Feed
+                    📹 Camera Feed
                   </h3>
                   <p className="text-sm text-green-600">
-                    Real-time hand landmark detection active
+                    Hand landmark detection ready
                   </p>
                 </div>
                 <button
@@ -543,7 +488,7 @@ const HandLandMarks = () => {
                   className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   <Icon icon="mdi:stop" className="text-xl" />
-                  Stop Camera
+                  Stop
                 </button>
               </div>
             </div>
