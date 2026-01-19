@@ -122,6 +122,8 @@ const HandLandMarks = () => {
   const handleVideoEnd = () => {
     console.log("Video ended - processing complete");
     setIsVideoPlaying(false);
+    setIsCameraActive(false);
+    setLandmarksDetected(false);
 
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -203,12 +205,15 @@ const HandLandMarks = () => {
       }
       videoRef.current.pause();
       videoRef.current.src = "";
+      videoRef.current.onended = null;
+      videoRef.current.ontimeupdate = null;
     }
 
     setUploadedVideoFile(null);
     setIsVideoMode(false);
     setIsVideoPlaying(false);
     setIsCameraActive(false);
+    setLandmarksDetected(false);
     setVideoDuration(0);
     setCurrentTime(0);
 
@@ -440,19 +445,19 @@ const HandLandMarks = () => {
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="relative">
+          <div className="relative" style={{ maxWidth: "640px" }}>
             <video
               ref={videoRef}
               playsInline
               muted
-              className="hidden"
+              className={`border-2 border-gray-300 rounded-lg w-full ${isCameraActive || isVideoMode ? "block" : "hidden"}`}
               style={{ maxWidth: "640px", height: "auto" }}
             />
             <canvas
               ref={canvasRef}
               width="640"
               height="480"
-              className={`border-2 border-gray-300 rounded-lg w-full ${isCameraActive || isVideoMode ? "block" : "hidden"}`}
+              className={`absolute top-0 left-0 w-full pointer-events-none ${isCameraActive || isVideoMode ? "block" : "hidden"}`}
               style={{ maxWidth: "640px", height: "auto" }}
             />
             {!isCameraActive && !isVideoMode && (
