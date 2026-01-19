@@ -5,6 +5,7 @@ import Input from "./components/common/input";
 import Button from "./components/common/button";
 import CameraDetection from "./components/card/camera";
 import HandLandMarks from "./components/handLandMarks";
+import CameraDetections from "./components/camera";
 // import CameraDetection from "./components/camera";
 const App = () => {
   const lines = [
@@ -87,6 +88,7 @@ const App = () => {
       {/* <CameraDetection /> */}
 
       <HandLandMarks />
+      {/* <CameraDetections /> */}
     </div>
   );
 };

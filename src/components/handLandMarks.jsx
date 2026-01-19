@@ -7,6 +7,7 @@ const HandLandMarks = () => {
   const videoRef = useRef(null);
   const intervalRef = useRef(null);
   const handLandmarkerRef = useRef(null);
+  const [messageHistory, setMessageHistory] = useState([]);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [uploadedVideoFile, setUploadedVideoFile] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
@@ -24,7 +25,7 @@ const HandLandMarks = () => {
 
   const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
 
-  const { sendMessage, readyState } = useWebSocket(wsUrl, {
+  const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
       console.log("WebSocket connected");
       setConnectionStatus("Connected");
@@ -39,7 +40,13 @@ const HandLandMarks = () => {
     },
     shouldReconnect: () => true,
   });
-
+  useEffect(() => {
+    // Listen for messages from WebSocket
+    if (lastMessage !== null) {
+      console.log("Received message:", lastMessage.data);
+      setMessageHistory((prev) => prev.concat(lastMessage));
+    }
+  }, [lastMessage]);
   // Initialize MediaPipe Hand Landmarker
   useEffect(() => {
     const initializeHandLandmarker = async () => {
@@ -256,6 +263,16 @@ const HandLandMarks = () => {
         fpsStartTimeRef.current = currentTime;
       }
 
+      // Capture frame as base64
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const base64Frame = canvas.toDataURL("image/jpeg", 0.8);
+
+      console.log(`📸 Full Base64 length: ${base64Frame.length} characters`);
+
       let allLandmarks = [];
       const startTimeMs = performance.now();
 
@@ -331,26 +348,24 @@ const HandLandMarks = () => {
 
       const landmarkData = {
         type: "video_buffer",
+        frames: [base64Frame],
         timestamp: Date.now(),
         buffer_id: `video_${Date.now()}`,
-        frame_count: frameCountRef.current,
-        landmarks: paddedLandmarks,
       };
 
       sendMessage(JSON.stringify(landmarkData));
 
-      console.log("🚀 LANDMARK DATA SENT TO BACKEND:");
+      console.log("🚀 FRAME DATA SENT TO BACKEND:");
       console.log(`Frame #${frameCountRef.current}:`, {
         type: landmarkData.type,
+        landmarkData: landmarkData,
         timestamp: landmarkData.timestamp,
         buffer_id: landmarkData.buffer_id,
-        frame_count: landmarkData.frame_count,
-        landmarks_length: landmarkData.landmarks.length,
-        landmarks_data: landmarkData.landmarks,
-        // landmarks_sample: landmarkData.landmarks.slice(0, 12),
+        frames_count: landmarkData.frames.length,
+        frame_size: base64Frame.length,
       });
       console.log(
-        `✅ Data sent: ${paddedLandmarks.length} landmark values (${allLandmarks.length} detected landmarks)`,
+        `✅ Data sent: ${landmarkData.frames.length} frame(s), Base64 size: ${base64Frame.length} characters`,
       );
       console.log("================================");
     }
@@ -524,6 +539,14 @@ const HandLandMarks = () => {
             </div>
           )}
         </div>
+
+        <span>The WebSocket is currently {connectionStatus}</span>
+        {lastMessage ? <span>Last message: {lastMessage.data}</span> : null}
+        <ul>
+          {messageHistory.map((message, idx) => (
+            <span key={idx}>{message ? message.data?.message : null}</span>
+          ))}
+        </ul>
       </div>
     </>
   );
