@@ -76,9 +76,9 @@ const CameraDetection = () => {
           },
           runningMode: "VIDEO",
           numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
-          minHandDetectionConfidence: 0.3,
-          minHandPresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
+          minHandDetectionConfidence: 0.6,
+          // minHandPresenceConfidence: 0.7,
+          // minTrackingConfidence: 0.7,
         });
 
         handLandmarkerRef.current = handLandmarker;
@@ -92,35 +92,35 @@ const CameraDetection = () => {
   }, []);
 
   // Initialize MediaPipe Face Landmarker
-  useEffect(() => {
-    const initializeFaceLandmarker = async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-        );
+  // useEffect(() => {
+  //   const initializeFaceLandmarker = async () => {
+  //     try {
+  //       const vision = await FilesetResolver.forVisionTasks(
+  //         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
+  //       );
 
-        const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numFaces: 1,
-          minFaceDetectionConfidence: 0.3,
-          minFacePresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
-        });
+  //       const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+  //         baseOptions: {
+  //           modelAssetPath:
+  //             "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+  //           delegate: "GPU",
+  //         },
+  //         runningMode: "VIDEO",
+  //         numFaces: 1,
+  //         // minFaceDetectionConfidence: 0.7,
+  //         // minFacePresenceConfidence: 0.7,
+  //         // minTrackingConfidence: 0.7,
+  //       });
 
-        faceLandmarkerRef.current = faceLandmarker;
-        console.log("MediaPipe Face Landmarker initialized");
-      } catch (error) {
-        console.error("Error initializing Face Landmarker:", error);
-      }
-    };
+  //       faceLandmarkerRef.current = faceLandmarker;
+  //       console.log("MediaPipe Face Landmarker initialized");
+  //     } catch (error) {
+  //       console.error("Error initializing Face Landmarker:", error);
+  //     }
+  //   };
 
-    initializeFaceLandmarker();
-  }, []);
+  //   initializeFaceLandmarker();
+  // }, []);
 
   const handleVideoUpload = (event) => {
     const file = event.target.files[0];
@@ -453,77 +453,77 @@ const CameraDetection = () => {
       }
 
       // Detect face
-      if (faceLandmarker) {
-        try {
-          const faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
+      // if (faceLandmarker) {
+      //   try {
+      //     const faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
 
-          if (
-            faceResults.faceLandmarks &&
-            faceResults.faceLandmarks.length > 0
-          ) {
-            setLandmarksDetected(true);
+      //     if (
+      //       faceResults.faceLandmarks &&
+      //       faceResults.faceLandmarks.length > 0
+      //     ) {
+      //       setLandmarksDetected(true);
 
-            if (!drawingUtilsRef.current) {
-              drawingUtilsRef.current = new DrawingUtils(context);
-            }
+      //       if (!drawingUtilsRef.current) {
+      //         drawingUtilsRef.current = new DrawingUtils(context);
+      //       }
 
-            const drawingUtils = drawingUtilsRef.current;
+      //       const drawingUtils = drawingUtilsRef.current;
 
-            // Face landmarks for sign language (33 key points to match pose landmarks)
-            // Eyes, eyebrows, nose, mouth, chin - critical for ASL facial expressions
-            const keyFaceIndices = [
-              // Right eye (5 points)
-              33, 133, 160, 159, 158,
-              // Left eye (5 points)
-              362, 263, 387, 386, 385,
-              // Right eyebrow (3 points)
-              46, 52, 65,
-              // Left eyebrow (3 points)
-              276, 282, 295,
-              // Nose (6 points)
-              1, 2, 98, 327, 4, 5,
-              // Mouth outer (9 points)
-              61, 291, 0, 17, 84, 314, 405, 375, 267,
-              // Chin and jaw (2 points)
-              152, 175,
-            ]; // Total: 33 landmarks
+      //       // Face landmarks for sign language (33 key points to match pose landmarks)
+      //       // Eyes, eyebrows, nose, mouth, chin - critical for ASL facial expressions
+      //       const keyFaceIndices = [
+      //         // Right eye (5 points)
+      //         33, 133, 160, 159, 158,
+      //         // Left eye (5 points)
+      //         362, 263, 387, 386, 385,
+      //         // Right eyebrow (3 points)
+      //         46, 52, 65,
+      //         // Left eyebrow (3 points)
+      //         276, 282, 295,
+      //         // Nose (6 points)
+      //         1, 2, 98, 327, 4, 5,
+      //         // Mouth outer (9 points)
+      //         61, 291, 0, 17, 84, 314, 405, 375, 267,
+      //         // Chin and jaw (2 points)
+      //         152, 175,
+      //       ]; // Total: 33 landmarks
 
-            faceResults.faceLandmarks.forEach((faceLandmarks) => {
-              // Draw key face points
-              const keyPoints = keyFaceIndices
-                .map((i) => faceLandmarks[i])
-                .filter(Boolean);
+      //       faceResults.faceLandmarks.forEach((faceLandmarks) => {
+      //         // Draw key face points
+      //         const keyPoints = keyFaceIndices
+      //           .map((i) => faceLandmarks[i])
+      //           .filter(Boolean);
 
-              drawingUtils.drawLandmarks(keyPoints, {
-                radius: 3,
-                color: "#00FFFF",
-                fillColor: "#FFFF00",
-              });
+      //         drawingUtils.drawLandmarks(keyPoints, {
+      //           radius: 3,
+      //           color: "#00FFFF",
+      //           fillColor: "#FFFF00",
+      //         });
 
-              // Add key face landmarks to array
-              keyFaceIndices.forEach((faceIndex) => {
-                if (faceLandmarks[faceIndex]) {
-                  const landmark = faceLandmarks[faceIndex];
-                  allLandmarks.push({
-                    type: "face",
-                    landmarkIndex: faceIndex,
-                    x: landmark.x,
-                    y: landmark.y,
-                    z: landmark.z,
-                    // visibility: landmark.visibility || 1.0,
-                  });
-                }
-              });
-            });
+      //         // Add key face landmarks to array
+      //         keyFaceIndices.forEach((faceIndex) => {
+      //           if (faceLandmarks[faceIndex]) {
+      //             const landmark = faceLandmarks[faceIndex];
+      //             allLandmarks.push({
+      //               type: "face",
+      //               landmarkIndex: faceIndex,
+      //               x: landmark.x,
+      //               y: landmark.y,
+      //               z: landmark.z,
+      //               // visibility: landmark.visibility || 1.0,
+      //             });
+      //           }
+      //         });
+      //       });
 
-            console.log(
-              `Face Detected with ${keyFaceIndices.length} key landmarks`,
-            );
-          }
-        } catch (error) {
-          console.error("Error detecting face:", error);
-        }
-      }
+      //       console.log(
+      //         `Face Detected with ${keyFaceIndices.length} key landmarks`,
+      //       );
+      //     }
+      //   } catch (error) {
+      //     console.error("Error detecting face:", error);
+      //   }
+      // }
 
       // Update detection status
       if (allLandmarks.length === 0) {

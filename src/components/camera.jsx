@@ -6,15 +6,15 @@ import {
   FaceLandmarker,
   FilesetResolver,
   DrawingUtils,
+  HolisticLandmarker,
 } from "@mediapipe/tasks-vision";
 
-const CameraDetection = () => {
+const CameraDetections = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastFrameTimeRef = useRef(0);
-  const handLandmarkerRef = useRef(null);
-  const faceLandmarkerRef = useRef(null);
+  const holisticLandmarkerRef = useRef(null);
   const drawingUtilsRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
@@ -55,66 +55,48 @@ const CameraDetection = () => {
     }
   }, [lastMessage]);
 
-  // Initialize MediaPipe Hand Landmarker
+  // Initialize MediaPipe Holistic Landmarker
   useEffect(() => {
-    const initializeHandLandmarker = async () => {
+    const initializeHolisticLandmarker = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
         );
 
-        const handLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-            delegate: "GPU",
+        // const holisticLandmarker = await HolisticLandmarker.createFromModelPath(
+        //   vision,
+        //   {
+
+        //     "https://storage.googleapis.com/mediapipe-models/holistic_landmarker/holistic_landmarker/float16/1/hand_landmark.task",
+
+        //   }
+
+        // );
+
+        const holisticLandmarker = await HolisticLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/holistic_landmarker/holistic_landmarker/float16/1/hand_landmark.task",
+              delegate: "GPU",
+            },
+            runningMode: "VIDEO",
+            // numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
+            minHandDetectionConfidence: 0.1,
+            // minHandPresenceConfidence: 0.5,
+            // minTrackingConfidence: 0.5,
           },
-          runningMode: "VIDEO",
-          numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
-          minHandDetectionConfidence: 0.3,
-          minHandPresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
-        });
-
-        handLandmarkerRef.current = handLandmarker;
-        console.log("MediaPipe Hand Landmarker initialized");
-      } catch (error) {
-        console.error("Error initializing MediaPipe:", error);
-      }
-    };
-
-    initializeHandLandmarker();
-  }, []);
-
-  // Initialize MediaPipe Face Landmarker
-  useEffect(() => {
-    const initializeFaceLandmarker = async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
         );
 
-        const faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numFaces: 1,
-          minFaceDetectionConfidence: 0.3,
-          minFacePresenceConfidence: 0.3,
-          minTrackingConfidence: 0.3,
-        });
-
-        faceLandmarkerRef.current = faceLandmarker;
-        console.log("MediaPipe Face Landmarker initialized");
+        holisticLandmarkerRef.current = holisticLandmarker;
+        console.log("MediaPipe Holistic Landmarker initialized");
       } catch (error) {
-        console.error("Error initializing Face Landmarker:", error);
+        console.error("Error initializing Holistic Landmarker:", error);
       }
     };
 
-    initializeFaceLandmarker();
+    initializeHolisticLandmarker();
   }, []);
 
   const handleVideoUpload = (event) => {
@@ -268,8 +250,7 @@ const CameraDetection = () => {
   const captureFrame = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    const handLandmarker = handLandmarkerRef.current;
-    const faceLandmarker = faceLandmarkerRef.current;
+    const holisticLandmarker = holisticLandmarkerRef.current;
 
     console.log(`🎬 Frame capture attempt #${frameCountRef.current + 1}`);
     console.log(
@@ -291,86 +272,84 @@ const CameraDetection = () => {
       // Draw video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Detect hand and face landmarks
+      // Detect holistic landmarks (pose, face, and hands)
       let allLandmarks = [];
       const startTimeMs = performance.now();
 
-      // Detect hands
-      if (handLandmarker) {
+      // Detect using holistic landmarker
+      if (holisticLandmarker) {
         try {
-          const handResults = handLandmarker.detectForVideo(video, startTimeMs);
+          const results = holisticLandmarker.detectForVideo(video, startTimeMs);
 
-          // Process and draw hand landmarks
-          if (handResults.landmarks && handResults.landmarks.length > 0) {
+          // Initialize drawing utils if not already done
+          if (!drawingUtilsRef.current) {
+            drawingUtilsRef.current = new DrawingUtils(context);
+          }
+
+          const drawingUtils = drawingUtilsRef.current;
+
+          // Process hand landmarks
+          if (results.leftHandLandmarks) {
             setLandmarksDetected(true);
-
-            // Initialize drawing utils if not already done
-            if (!drawingUtilsRef.current) {
-              drawingUtilsRef.current = new DrawingUtils(context);
-            }
-
-            const drawingUtils = drawingUtilsRef.current;
-
-            // Collect all landmarks from all detected hands
-            handResults.landmarks.forEach((landmarks, handIndex) => {
-              // Draw landmarks and connections for each detected hand
-              drawingUtils.drawLandmarks(landmarks, {
-                radius: 5,
+            drawingUtils.drawLandmarks(results.leftHandLandmarks, {
+              radius: 5,
+              color: "#00FF00",
+              fillColor: "#FF0000",
+            });
+            drawingUtils.drawConnectors(
+              results.leftHandLandmarks,
+              HolisticLandmarker.HAND_CONNECTIONS,
+              {
                 color: "#00FF00",
-                fillColor: "#FF0000",
-              });
+                lineWidth: 2,
+              },
+            );
 
-              drawingUtils.drawConnectors(
-                landmarks,
-                HandLandmarker.HAND_CONNECTIONS,
-                {
-                  color: "#00FF00",
-                  lineWidth: 2,
-                },
-              );
-
-              // Add each landmark to the array with hand index
-              landmarks.forEach((landmark, landmarkIndex) => {
-                allLandmarks.push({
-                  type: "hand",
-                  handIndex,
-                  landmarkIndex,
-                  x: landmark.x,
-                  y: landmark.y,
-                  z: landmark.z,
-                  // visibility: landmark.visibility || 1.0,
-                });
+            results.leftHandLandmarks.forEach((landmark, landmarkIndex) => {
+              allLandmarks.push({
+                type: "hand",
+                handIndex: 0,
+                landmarkIndex,
+                x: landmark.x,
+                y: landmark.y,
+                z: landmark.z,
               });
             });
-
-            console.log(
-              `Total Hands Detected: ${handResults.landmarks.length}`,
-            );
           }
-        } catch (error) {
-          console.error("Error detecting hands:", error);
-        }
-      }
 
-      // Detect face
-      if (faceLandmarker) {
-        try {
-          const faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
+          if (results.rightHandLandmarks) {
+            setLandmarksDetected(true);
+            drawingUtils.drawLandmarks(results.rightHandLandmarks, {
+              radius: 5,
+              color: "#00FF00",
+              fillColor: "#FF0000",
+            });
+            drawingUtils.drawConnectors(
+              results.rightHandLandmarks,
+              HolisticLandmarker.HAND_CONNECTIONS,
+              {
+                color: "#00FF00",
+                lineWidth: 2,
+              },
+            );
 
-          if (
-            faceResults.faceLandmarks &&
-            faceResults.faceLandmarks.length > 0
-          ) {
+            results.rightHandLandmarks.forEach((landmark, landmarkIndex) => {
+              allLandmarks.push({
+                type: "hand",
+                handIndex: 1,
+                landmarkIndex,
+                x: landmark.x,
+                y: landmark.y,
+                z: landmark.z,
+              });
+            });
+          }
+
+          // Process face landmarks
+          if (results.faceLandmarks) {
             setLandmarksDetected(true);
 
-            if (!drawingUtilsRef.current) {
-              drawingUtilsRef.current = new DrawingUtils(context);
-            }
-
-            const drawingUtils = drawingUtilsRef.current;
-
-            // Face landmarks for sign language (33 key points to match pose landmarks)
-            // Eyes, eyebrows, nose, mouth, chin - critical for ASL facial expressions
+            // Face landmarks for sign language (33 key points)
             const keyFaceIndices = [
               // Right eye (5 points)
               33, 133, 160, 159, 158,
@@ -386,42 +365,41 @@ const CameraDetection = () => {
               61, 291, 0, 17, 84, 314, 405, 375, 267,
               // Chin and jaw (2 points)
               152, 175,
-            ]; // Total: 33 landmarks
+            ];
 
-            faceResults.faceLandmarks.forEach((faceLandmarks) => {
-              // Draw key face points
-              const keyPoints = keyFaceIndices
-                .map((i) => faceLandmarks[i])
-                .filter(Boolean);
+            const keyPoints = keyFaceIndices
+              .map((i) => results.faceLandmarks[i])
+              .filter(Boolean);
 
-              drawingUtils.drawLandmarks(keyPoints, {
-                radius: 3,
-                color: "#00FFFF",
-                fillColor: "#FFFF00",
-              });
+            drawingUtils.drawLandmarks(keyPoints, {
+              radius: 3,
+              color: "#00FFFF",
+              fillColor: "#FFFF00",
+            });
 
-              // Add key face landmarks to array
-              keyFaceIndices.forEach((faceIndex) => {
-                if (faceLandmarks[faceIndex]) {
-                  const landmark = faceLandmarks[faceIndex];
-                  allLandmarks.push({
-                    type: "face",
-                    landmarkIndex: faceIndex,
-                    x: landmark.x,
-                    y: landmark.y,
-                    z: landmark.z,
-                    // visibility: landmark.visibility || 1.0,
-                  });
-                }
-              });
+            keyFaceIndices.forEach((faceIndex) => {
+              if (results.faceLandmarks[faceIndex]) {
+                const landmark = results.faceLandmarks[faceIndex];
+                allLandmarks.push({
+                  type: "face",
+                  landmarkIndex: faceIndex,
+                  x: landmark.x,
+                  y: landmark.y,
+                  z: landmark.z,
+                });
+              }
             });
 
             console.log(
               `Face Detected with ${keyFaceIndices.length} key landmarks`,
             );
           }
+
+          console.log(
+            `Holistic Detection - Left Hand: ${!!results.leftHandLandmarks}, Right Hand: ${!!results.rightHandLandmarks}, Face: ${!!results.faceLandmarks}`,
+          );
         } catch (error) {
-          console.error("Error detecting face:", error);
+          console.error("Error detecting holistic landmarks:", error);
         }
       }
 
@@ -632,4 +610,4 @@ const CameraDetection = () => {
   );
 };
 
-export default CameraDetection;
+export default CameraDetections;

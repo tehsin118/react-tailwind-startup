@@ -4,6 +4,7 @@ import { ScrollSmoother, ScrollTrigger } from "gsap/all";
 import Input from "./components/common/input";
 import Button from "./components/common/button";
 import CameraDetection from "./components/card/camera";
+import HandLandMarks from "./components/handLandMarks";
 // import CameraDetection from "./components/camera";
 const App = () => {
   const lines = [
@@ -82,10 +83,10 @@ const App = () => {
     return () => tl.kill();
   }, []);
   return (
-    <div className="bg-[#fff] h-screen p-32">
+    <div className="bg-[#fff] h-screen overflow-auto p-32">
       {/* <CameraDetection /> */}
 
-      <CameraDetection />
+      <HandLandMarks />
     </div>
   );
 };

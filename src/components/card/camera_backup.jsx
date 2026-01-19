@@ -3,8 +3,10 @@ import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
 import {
   HandLandmarker,
+  FaceLandmarker,
   FilesetResolver,
   DrawingUtils,
+  PoseLandmarker,
 } from "@mediapipe/tasks-vision";
 
 const CameraDetection = () => {
@@ -12,6 +14,8 @@ const CameraDetection = () => {
   const canvasRef = useRef(null);
   const intervalRef = useRef(null);
   const handLandmarkerRef = useRef(null);
+  const faceLandmarkerRef = useRef(null);
+  const poseLandmarkerRef = useRef(null);
   const drawingUtilsRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
@@ -524,7 +528,7 @@ const CameraDetection = () => {
 
     // Create NPY-compatible data structure
     const npyData = {
-        shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
+      shape: [allLandmarksDataRef.current.length, 225], // [num_frames, num_landmarks] - 33 pose (99) + 42 hands (126) + 468 face (1404) = 1629
       dtype: "float32",
       data: allLandmarksDataRef.current,
       metadata: {
@@ -533,9 +537,11 @@ const CameraDetection = () => {
         fps: actualFPS,
         timestamp: new Date().toISOString(),
         landmarks_breakdown: {
+          pose_landmarks: 33,
           hand_landmarks: 42,
+          face_landmarks: 468,
           coordinates_per_landmark: 3,
-            total_values: 126,
+          total_values: 225,
         },
       },
     };
@@ -582,7 +588,7 @@ const CameraDetection = () => {
       console.log(`🔵 Saving to folder: ${folderName}, file: ${baseName}.json`);
 
       const npyData = {
-          shape: [allLandmarksDataRef.current.length, 126], // [num_frames, num_landmarks] - 42 hands × 3 coords = 126
+        shape: [allLandmarksDataRef.current.length, 225], // [num_frames, num_landmarks] - 33 pose + 42 hands + 468 face = 1629
         dtype: "float32",
         data: allLandmarksDataRef.current,
         metadata: {
@@ -593,9 +599,11 @@ const CameraDetection = () => {
           timestamp: new Date().toISOString(),
           run_number: currentRunNumberRef.current,
           landmarks_breakdown: {
+            pose_landmarks: 33,
             hand_landmarks: 42,
+            face_landmarks: 468,
             coordinates_per_landmark: 3,
-              total_values: 126,
+            total_values: 225,
           },
         },
       };
@@ -755,6 +763,8 @@ const CameraDetection = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const handLandmarker = handLandmarkerRef.current;
+    const poseLandmarker = poseLandmarkerRef.current;
+    const faceLandmarker = faceLandmarkerRef.current;
 
     if (canvas && video && readyState === 1) {
       // Check if video is actually playing
@@ -786,9 +796,67 @@ const CameraDetection = () => {
       // Draw video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Detect hand landmarks
-        let allLandmarks = [];
-        const startTimeMs = performance.now();
+      // Detect hand and face landmarks
+      let allLandmarks = [];
+      const startTimeMs = performance.now();
+
+      // Detect pose landmarks
+      if (poseLandmarker) {
+        try {
+          const poseResults = poseLandmarker.detectForVideo(video, startTimeMs);
+
+          if (poseResults.landmarks && poseResults.landmarks.length > 0) {
+            setLandmarksDetected(true);
+
+            if (!drawingUtilsRef.current) {
+              drawingUtilsRef.current = new DrawingUtils(context);
+            }
+
+            const drawingUtils = drawingUtilsRef.current;
+
+            // Draw pose landmarks and connections
+            poseResults.landmarks.forEach((poseLandmarks) => {
+              // Draw all pose points
+              drawingUtils.drawLandmarks(poseLandmarks, {
+                radius: 4,
+                color: "#FF6B6B",
+                fillColor: "#FFA500",
+              });
+
+              // Draw pose connections if available
+              if (poseResults.segmentationMasks) {
+                drawingUtils.drawConnectors(
+                  poseLandmarks,
+                  PoseLandmarker.POSE_CONNECTIONS,
+                  {
+                    color: "#FF6B6B",
+                    lineWidth: 2,
+                  },
+                );
+              }
+            });
+
+            // Add pose landmarks to array (33 points per pose)
+            poseResults.landmarks.forEach((poseLandmarks) => {
+              poseLandmarks.forEach((landmark, landmarkIndex) => {
+                allLandmarks.push({
+                  type: "pose",
+                  landmarkIndex: landmarkIndex,
+                  x: landmark.x,
+                  y: landmark.y,
+                  z: landmark.z,
+                });
+              });
+            });
+
+            console.log(
+              `Pose Detected: ${poseResults.landmarks[0]?.length || 0} landmarks`,
+            );
+          }
+        } catch (error) {
+          console.error("Error detecting pose:", error);
+        }
+      }
 
       // Detect hands
       if (handLandmarker) {
@@ -847,6 +915,53 @@ const CameraDetection = () => {
         }
       }
 
+      // Detect face using FaceMesh (468-point face mesh)
+      if (faceLandmarker) {
+        try {
+          const faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
+
+          if (
+            faceResults.faceLandmarks &&
+            faceResults.faceLandmarks.length > 0
+          ) {
+            setLandmarksDetected(true);
+
+            if (!drawingUtilsRef.current) {
+              drawingUtilsRef.current = new DrawingUtils(context);
+            }
+
+            const drawingUtils = drawingUtilsRef.current;
+
+            // Use complete FaceMesh - all 468 facial landmarks
+            faceResults.faceLandmarks.forEach((faceLandmarks) => {
+              // Draw all face mesh points
+              drawingUtils.drawLandmarks(faceLandmarks, {
+                radius: 1,
+                color: "#00FFFF",
+                fillColor: "#FF00FF",
+              });
+
+              // Add ALL face landmarks to array (complete 468-point mesh)
+              faceLandmarks.forEach((landmark, landmarkIndex) => {
+                allLandmarks.push({
+                  type: "face",
+                  landmarkIndex: landmarkIndex,
+                  x: landmark.x,
+                  y: landmark.y,
+                  z: landmark.z,
+                });
+              });
+            });
+
+            console.log(
+              `Complete FaceMesh Detected: ${faceResults.faceLandmarks[0]?.length || 0} facial landmarks`,
+            );
+          }
+        } catch (error) {
+          console.error("Error detecting face:", error);
+        }
+      }
+
       // Update detection status
       if (allLandmarks.length === 0) {
         setLandmarksDetected(false);
@@ -866,11 +981,14 @@ const CameraDetection = () => {
 
       // Debug logging for each frame
       const handCount = allLandmarks.filter((l) => l.type === "hand").length;
+      const faceCount = allLandmarks.filter((l) => l.type === "face").length;
 
       console.log("=== FRAME PROCESSING DATA ===");
       console.log(`Frame: #${frameCountRef.current} | FPS: ${actualFPS}`);
       console.log(`Processing Time: ${deltaTime.toFixed(1)}ms`);
-        console.log(`Hand landmarks: ${handCount}`);
+      console.log(
+        `Hand landmarks: ${handCount} | Face landmarks: ${faceCount}`,
+      );
       console.log(`Total landmarks: ${allLandmarks.length}`);
       console.log(`Flattened array length: ${flattenedLandmarks.length}`);
 
@@ -881,10 +999,13 @@ const CameraDetection = () => {
       }
 
       // Calculate total landmark values
+      // Pose landmarks: 33 × 3 coords = 99 values
       // Hand landmarks: 42 (21 × 2 hands) × 3 coords = 126 values
-        const totalLandmarkValues = 42 * 3; // 126 values
+      // Face landmarks: 468 × 3 coords = 1404 values
+      // Total: 1629 values
+      const totalLandmarkValues = 33 * 3 + 42 * 3 + 468 * 3; // 1629 values
 
-        // Ensure exactly 126 values (pad with zeros if needed, truncate if exceeds)
+      // Ensure exactly 1629 values (pad with zeros if needed, truncate if exceeds)
       const paddedLandmarks = new Array(totalLandmarkValues).fill(0);
       for (
         let i = 0;
@@ -908,6 +1029,7 @@ const CameraDetection = () => {
         landmarks: paddedLandmarks,
         detected_landmarks_count: allLandmarks.length,
         hand_count: handCount,
+        face_count: faceCount,
       });
 
       // Send both landmark data and video frame to backend
