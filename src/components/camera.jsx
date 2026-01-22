@@ -7,6 +7,7 @@ const CameraDetections = () => {
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastFrameTimeRef = useRef(0);
+  const isCapturingRef = useRef(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [uploadedVideoFile, setUploadedVideoFile] = useState(null);
@@ -17,9 +18,12 @@ const CameraDetections = () => {
   const [frameCount, setFrameCount] = useState(0);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
+  const [currentPrediction, setCurrentPrediction] = useState(null);
+  const [detectedSentence, setDetectedSentence] = useState("");
   const frameCountRef = useRef(0);
 
-  const wsUrl = "https://asl-backend.octaloop.dev/ws";
+  // const wsUrl = "https://asl-backend.octaloop.dev/ws";
+  const wsUrl = "https://unbigamous-mariano-unrheumatic.ngrok-free.dev/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -43,7 +47,37 @@ const CameraDetections = () => {
     // Listen for messages from WebSocket
     if (lastMessage !== null) {
       console.log("Received message:", lastMessage.data);
-      setMessageHistory((prev) => prev.concat(lastMessage));
+
+      try {
+        // Try to parse JSON messages
+        const data = JSON.parse(lastMessage.data);
+        console.log("Parsed message:", data);
+
+        // Handle different message types
+        if (data.type === "prediction_result") {
+          console.log("Prediction result:", data);
+
+          // Update current prediction
+          setCurrentPrediction({
+            sign: data.sign_name,
+            confidence: data.confidence,
+            timestamp: data.timestamp,
+          });
+
+          // Update sentence if one was formed
+          if (data.sentence_formed && data.sentence) {
+            setDetectedSentence(data.sentence);
+          }
+        } else if (data.type === "error") {
+          console.error("Backend error:", data.message);
+        }
+
+        setMessageHistory((prev) => prev.concat(lastMessage));
+      } catch (e) {
+        // If not JSON, treat as plain text
+        console.log("Plain text message:", lastMessage.data);
+        setMessageHistory((prev) => prev.concat(lastMessage));
+      }
     }
   }, [lastMessage]);
 
@@ -93,6 +127,7 @@ const CameraDetections = () => {
       videoRef.current.play();
       setIsCameraActive(true);
       setVideoLoaded(false);
+      isCapturingRef.current = true;
       startFrameCapture();
     }
   };
@@ -109,6 +144,7 @@ const CameraDetections = () => {
 
         // Start capturing frames after camera is ready
         videoRef.current.onloadedmetadata = () => {
+          isCapturingRef.current = true;
           startFrameCapture();
         };
       }
@@ -121,6 +157,9 @@ const CameraDetections = () => {
   };
 
   const stopCamera = () => {
+    // Stop capturing immediately
+    isCapturingRef.current = false;
+
     if (videoRef.current) {
       // Stop camera stream if active
       if (videoRef.current.srcObject) {
@@ -174,11 +213,18 @@ const CameraDetections = () => {
   };
 
   const captureFrameLoop = () => {
+    // Check if we should still be capturing
+    if (!isCapturingRef.current) {
+      console.log("❌ Frame loop stopped - capturing disabled");
+      return;
+    }
+
     const video = videoRef.current;
 
     // Check if video is still active and playing
     if (!video || video.paused || video.ended) {
       console.log("❌ Frame loop stopped - video ended or paused");
+      isCapturingRef.current = false;
       return;
     }
 
@@ -196,6 +242,12 @@ const CameraDetections = () => {
   };
 
   const captureFrame = () => {
+    // Don't capture if not actively capturing
+    if (!isCapturingRef.current) {
+      console.log("⏸️ Skipping frame - capturing stopped");
+      return;
+    }
+
     const canvas = canvasRef.current;
     const video = videoRef.current;
 
@@ -226,20 +278,18 @@ const CameraDetections = () => {
 
       // Send video frame to backend
       const frameData = {
-        type: "video_frame",
+        type: "hand_landmarks",
         frame: base64Frame,
         timestamp: Date.now(),
-        frame_count: frameCountRef.current,
       };
 
       console.log("Sending frame data:", {
         type: frameData.type,
         timestamp: frameData.timestamp,
         frame: frameData.frame,
+        frame_count: frameCountRef.current,
       });
       sendMessage(JSON.stringify(frameData));
-
-      console.log(`Frame #${frameCountRef.current} sent to backend`);
     }
   };
 
@@ -285,6 +335,39 @@ const CameraDetections = () => {
             )}
           </div>
         </div>
+
+        {/* Prediction Display */}
+        {currentPrediction && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-blue-900">
+                  {currentPrediction.sign}
+                </h3>
+                <p className="text-sm text-blue-700">
+                  Confidence: {(currentPrediction.confidence * 100).toFixed(1)}%
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center">
+                  <span className="text-white text-2xl font-bold">
+                    {currentPrediction.sign?.charAt(0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sentence Display */}
+        {detectedSentence && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-green-900 mb-2">
+              Detected Sentence:
+            </h3>
+            <p className="text-lg text-green-800">{detectedSentence}</p>
+          </div>
+        )}
 
         <div className="flex flex-col gap-4">
           <div className="relative">
