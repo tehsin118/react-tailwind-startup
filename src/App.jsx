@@ -88,8 +88,8 @@ const App = () => {
     <div className="bg-[#fff] h-screen overflow-auto p-32">
       {/* <CameraDetection /> */}
 
-      <CameraFeed />
-      {/* <CameraDetections /> */}
+      {/* <CameraFeed /> */}
+      <CameraDetections />
     </div>
   );
 };

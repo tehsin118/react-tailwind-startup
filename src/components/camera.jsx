@@ -1,21 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
-import {
-  HandLandmarker,
-  FaceLandmarker,
-  FilesetResolver,
-  DrawingUtils,
-  HolisticLandmarker,
-} from "@mediapipe/tasks-vision";
 
 const CameraDetections = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastFrameTimeRef = useRef(0);
-  const holisticLandmarkerRef = useRef(null);
-  const drawingUtilsRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [uploadedVideoFile, setUploadedVideoFile] = useState(null);
@@ -24,12 +15,11 @@ const CameraDetections = () => {
   const [messageHistory, setMessageHistory] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
   const [frameCount, setFrameCount] = useState(0);
-  const [landmarksDetected, setLandmarksDetected] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const frameCountRef = useRef(0);
 
-  const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
+  const wsUrl = "https://asl-backend.octaloop.dev/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -45,6 +35,8 @@ const CameraDetections = () => {
       setConnectionStatus("Error");
     },
     shouldReconnect: () => true,
+    reconnectAttempts: 10,
+    reconnectInterval: 3000,
   });
 
   useEffect(() => {
@@ -54,50 +46,6 @@ const CameraDetections = () => {
       setMessageHistory((prev) => prev.concat(lastMessage));
     }
   }, [lastMessage]);
-
-  // Initialize MediaPipe Holistic Landmarker
-  useEffect(() => {
-    const initializeHolisticLandmarker = async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
-        );
-
-        // const holisticLandmarker = await HolisticLandmarker.createFromModelPath(
-        //   vision,
-        //   {
-
-        //     "https://storage.googleapis.com/mediapipe-models/holistic_landmarker/holistic_landmarker/float16/1/hand_landmark.task",
-
-        //   }
-
-        // );
-
-        const holisticLandmarker = await HolisticLandmarker.createFromOptions(
-          vision,
-          {
-            baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/holistic_landmarker/holistic_landmarker/float16/1/hand_landmark.task",
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            // numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
-            minHandDetectionConfidence: 0.1,
-            // minHandPresenceConfidence: 0.5,
-            // minTrackingConfidence: 0.5,
-          },
-        );
-
-        holisticLandmarkerRef.current = holisticLandmarker;
-        console.log("MediaPipe Holistic Landmarker initialized");
-      } catch (error) {
-        console.error("Error initializing Holistic Landmarker:", error);
-      }
-    };
-
-    initializeHolisticLandmarker();
-  }, []);
 
   const handleVideoUpload = (event) => {
     const file = event.target.files[0];
@@ -250,7 +198,6 @@ const CameraDetections = () => {
   const captureFrame = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    const holisticLandmarker = holisticLandmarkerRef.current;
 
     console.log(`🎬 Frame capture attempt #${frameCountRef.current + 1}`);
     console.log(
@@ -266,205 +213,33 @@ const CameraDetections = () => {
 
       const context = canvas.getContext("2d");
 
-      // Clear canvas before drawing
-      context.clearRect(0, 0, canvas.width, canvas.height);
-
       // Draw video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Detect holistic landmarks (pose, face, and hands)
-      let allLandmarks = [];
-      const startTimeMs = performance.now();
-
-      // Detect using holistic landmarker
-      if (holisticLandmarker) {
-        try {
-          const results = holisticLandmarker.detectForVideo(video, startTimeMs);
-
-          // Initialize drawing utils if not already done
-          if (!drawingUtilsRef.current) {
-            drawingUtilsRef.current = new DrawingUtils(context);
-          }
-
-          const drawingUtils = drawingUtilsRef.current;
-
-          // Process hand landmarks
-          if (results.leftHandLandmarks) {
-            setLandmarksDetected(true);
-            drawingUtils.drawLandmarks(results.leftHandLandmarks, {
-              radius: 5,
-              color: "#00FF00",
-              fillColor: "#FF0000",
-            });
-            drawingUtils.drawConnectors(
-              results.leftHandLandmarks,
-              HolisticLandmarker.HAND_CONNECTIONS,
-              {
-                color: "#00FF00",
-                lineWidth: 2,
-              },
-            );
-
-            results.leftHandLandmarks.forEach((landmark, landmarkIndex) => {
-              allLandmarks.push({
-                type: "hand",
-                handIndex: 0,
-                landmarkIndex,
-                x: landmark.x,
-                y: landmark.y,
-                z: landmark.z,
-              });
-            });
-          }
-
-          if (results.rightHandLandmarks) {
-            setLandmarksDetected(true);
-            drawingUtils.drawLandmarks(results.rightHandLandmarks, {
-              radius: 5,
-              color: "#00FF00",
-              fillColor: "#FF0000",
-            });
-            drawingUtils.drawConnectors(
-              results.rightHandLandmarks,
-              HolisticLandmarker.HAND_CONNECTIONS,
-              {
-                color: "#00FF00",
-                lineWidth: 2,
-              },
-            );
-
-            results.rightHandLandmarks.forEach((landmark, landmarkIndex) => {
-              allLandmarks.push({
-                type: "hand",
-                handIndex: 1,
-                landmarkIndex,
-                x: landmark.x,
-                y: landmark.y,
-                z: landmark.z,
-              });
-            });
-          }
-
-          // Process face landmarks
-          if (results.faceLandmarks) {
-            setLandmarksDetected(true);
-
-            // Face landmarks for sign language (33 key points)
-            const keyFaceIndices = [
-              // Right eye (5 points)
-              33, 133, 160, 159, 158,
-              // Left eye (5 points)
-              362, 263, 387, 386, 385,
-              // Right eyebrow (3 points)
-              46, 52, 65,
-              // Left eyebrow (3 points)
-              276, 282, 295,
-              // Nose (6 points)
-              1, 2, 98, 327, 4, 5,
-              // Mouth outer (9 points)
-              61, 291, 0, 17, 84, 314, 405, 375, 267,
-              // Chin and jaw (2 points)
-              152, 175,
-            ];
-
-            const keyPoints = keyFaceIndices
-              .map((i) => results.faceLandmarks[i])
-              .filter(Boolean);
-
-            drawingUtils.drawLandmarks(keyPoints, {
-              radius: 3,
-              color: "#00FFFF",
-              fillColor: "#FFFF00",
-            });
-
-            keyFaceIndices.forEach((faceIndex) => {
-              if (results.faceLandmarks[faceIndex]) {
-                const landmark = results.faceLandmarks[faceIndex];
-                allLandmarks.push({
-                  type: "face",
-                  landmarkIndex: faceIndex,
-                  x: landmark.x,
-                  y: landmark.y,
-                  z: landmark.z,
-                });
-              }
-            });
-
-            console.log(
-              `Face Detected with ${keyFaceIndices.length} key landmarks`,
-            );
-          }
-
-          console.log(
-            `Holistic Detection - Left Hand: ${!!results.leftHandLandmarks}, Right Hand: ${!!results.rightHandLandmarks}, Face: ${!!results.faceLandmarks}`,
-          );
-        } catch (error) {
-          console.error("Error detecting holistic landmarks:", error);
-        }
-      }
-
-      // Update detection status
-      if (allLandmarks.length === 0) {
-        setLandmarksDetected(false);
-      }
 
       // Increment frame counter
       frameCountRef.current += 1;
       setFrameCount(frameCountRef.current);
 
-      // Flatten landmarks data to array format [x, y, z, visibility, x, y, z, visibility, ...]
-      const flattenedLandmarks = allLandmarks.flatMap((landmark) => [
-        landmark.x,
-        landmark.y,
-        landmark.z,
-        // landmark.visibility,
-      ]);
-
-      // Debug logging
-      const handCount = allLandmarks.filter((l) => l.type === "hand").length;
-      const faceCount = allLandmarks.filter((l) => l.type === "face").length;
-      console.log("=== SIGN LANGUAGE DETECTION DATA ===");
-      console.log(`Frame: #${frameCountRef.current}`);
-      console.log(
-        `Hand landmarks: ${handCount} | Face landmarks: ${faceCount}`,
-      );
-      console.log(`Total landmarks: ${allLandmarks.length}`);
-      console.log(`Flattened array length: ${flattenedLandmarks.length}`);
-      console.log("====================================");
-
-      // Only send if we have landmarks detected
-      if (flattenedLandmarks.length === 0) {
-        console.warn("No landmarks detected - skipping frame send");
-        return;
-      }
-
-      // Ensure exactly 225 values (pad with zeros if needed, truncate if exceeds)
-      const paddedLandmarks = new Array(225).fill(0);
-      for (let i = 0; i < Math.min(flattenedLandmarks.length, 225); i++) {
-        paddedLandmarks[i] = flattenedLandmarks[i];
-      }
-
       // Convert canvas to base64 for video frame
       const dataURL = canvas.toDataURL("image/jpeg", 0.8);
       const base64Frame = dataURL.split(",")[1]; // Remove data:image/jpeg;base64, prefix
 
-      // Send both landmark data and video frame to backend
-      const landmarkData = {
-        type: "video_buffer",
-        // frames: [base64Frame], // Array of base64 encoded frames
+      // Send video frame to backend
+      const frameData = {
+        type: "video_frame",
+        frame: base64Frame,
         timestamp: Date.now(),
-        buffer_id: `video_${Date.now()}`,
         frame_count: frameCountRef.current,
-        landmarks: paddedLandmarks, // Include landmark data
       };
 
-      sendMessage(JSON.stringify(landmarkData));
-      console.log("landmarkDatalandmarkDatalandmarkData", landmarkData);
+      console.log("Sending frame data:", {
+        type: frameData.type,
+        timestamp: frameData.timestamp,
+        frame: frameData.frame,
+      });
+      sendMessage(JSON.stringify(frameData));
 
       console.log(`Frame #${frameCountRef.current} sent to backend`);
-      console.log(
-        `Data: ${paddedLandmarks.length} landmark values, 1 base64 frame (${allLandmarks.length} landmarks detected)`,
-      );
     }
   };
 
@@ -498,16 +273,6 @@ const CameraDetections = () => {
                 }`}
               >
                 {connectionStatus}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Landmarks: </span>
-              <span
-                className={`text-sm font-semibold ${
-                  landmarksDetected ? "text-green-500" : "text-gray-500"
-                }`}
-              >
-                {landmarksDetected ? "Detected" : "None"}
               </span>
             </div>
             {(videoLoaded || (isCameraActive && isVideoMode)) && (
@@ -590,7 +355,7 @@ const CameraDetections = () => {
             ) : (
               <button
                 onClick={stopCamera}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="flex items-center mt-36 gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               >
                 <Icon icon="mdi:stop" className="text-xl" />
                 Stop {isVideoMode ? "Video" : "Camera"}
