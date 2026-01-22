@@ -23,7 +23,7 @@ const HandLandMarks = () => {
   const fpsStartTimeRef = useRef(0);
   const allLandmarksDataRef = useRef([]);
 
-  const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
+  const wsUrl = "https://asl-backend.octaloop.dev/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
