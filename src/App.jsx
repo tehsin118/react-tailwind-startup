@@ -6,6 +6,7 @@ import Button from "./components/common/button";
 import CameraDetection from "./components/card/camera";
 import HandLandMarks from "./components/handLandMarks";
 import CameraDetections from "./components/camera";
+import CameraFeed from "./components/asl/cameraFeed";
 // import CameraDetection from "./components/camera";
 const App = () => {
   const lines = [
@@ -87,7 +88,7 @@ const App = () => {
     <div className="bg-[#fff] h-screen overflow-auto p-32">
       {/* <CameraDetection /> */}
 
-      <HandLandMarks />
+      <CameraFeed />
       {/* <CameraDetections /> */}
     </div>
   );
