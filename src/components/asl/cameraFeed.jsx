@@ -117,9 +117,9 @@ const CameraFeed = () => {
   const captureFrameLoop = () => {
     const video = videoRef.current;
 
-    // Check if video is still active and playing
-    if (!video || video.paused || video.ended || !isCameraActive) {
-      console.log("Frame loop stopped - video ended or paused");
+    // Check if camera is still active
+    if (!video || !isCameraActive) {
+      console.log("Frame loop stopped - camera inactive");
       return;
     }
 
