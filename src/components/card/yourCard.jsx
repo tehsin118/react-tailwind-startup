@@ -3,7 +3,6 @@ import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
 import {
   HandLandmarker,
-  FaceLandmarker,
   FilesetResolver,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
@@ -34,7 +33,8 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  const wsUrl = "https://asl-backend.octaloop.dev/ws/asl";
+  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
+  const wsUrl = "https://b4796476f379.ngrok-free.app/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -75,8 +75,9 @@ const CameraDetection = () => {
             delegate: "GPU",
           },
           runningMode: "VIDEO",
-          numHands: 2, // Detect both hands (2 * 21 = 42 landmarks)
-          minHandDetectionConfidence: 0.6,
+          numHands: 2,
+          // Detect both hands (2 * 21 = 42 landmarks)
+          // minHandDetectionConfidence: 0.6,
           // minHandPresenceConfidence: 0.7,
           // minTrackingConfidence: 0.7,
         });
@@ -180,6 +181,13 @@ const CameraDetection = () => {
 
         // Start capturing frames after camera is ready
         videoRef.current.onloadedmetadata = () => {
+          // Ensure video is playing so frames can be drawn
+          videoRef.current.play();
+          // Match canvas to actual video size when available
+          if (videoRef.current.videoWidth && videoRef.current.videoHeight) {
+            canvasRef.current.width = videoRef.current.videoWidth;
+            canvasRef.current.height = videoRef.current.videoHeight;
+          }
           startFrameCapture();
         };
       }
@@ -359,9 +367,8 @@ const CameraDetection = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const handLandmarker = handLandmarkerRef.current;
-    const faceLandmarker = faceLandmarkerRef.current;
 
-    if (canvas && video && readyState === 1) {
+    if (canvas && video) {
       // Check if video is actually playing
       if (video.readyState !== video.HAVE_ENOUGH_DATA) {
         console.warn("Video not ready yet");
@@ -451,6 +458,7 @@ const CameraDetection = () => {
           console.error("Error detecting hands:", error);
         }
       }
+      console.log("allLandmarks", allLandmarks);
 
       // Detect face
       // if (faceLandmarker) {
@@ -555,62 +563,47 @@ const CameraDetection = () => {
       console.log(`Total landmarks: ${allLandmarks.length}`);
       console.log(`Flattened array length: ${flattenedLandmarks.length}`);
 
-      // Only send if we have landmarks detected
-      if (flattenedLandmarks.length === 0) {
-        console.warn("No landmarks detected - skipping frame send");
-        return;
-      }
-
-      // Ensure exactly 225 values (pad with zeros if needed, truncate if exceeds)
-      const paddedLandmarks = new Array(225).fill(0);
-      for (let i = 0; i < Math.min(flattenedLandmarks.length, 225); i++) {
-        paddedLandmarks[i] = flattenedLandmarks[i];
-      }
+      // Round each value to 2 decimal places (send actual data without padding)
+      const roundedLandmarks = flattenedLandmarks.map(
+        (value) => Math.round(value * 100) / 100,
+      );
 
       // Convert canvas to base64 for video frame
       const dataURL = canvas.toDataURL("image/jpeg", 0.8);
       const base64Frame = dataURL.split(",")[1]; // Remove data:image/jpeg;base64, prefix
 
       // Store landmarks for NPY file generation
-      allLandmarksDataRef.current.push([...paddedLandmarks]);
+      allLandmarksDataRef.current.push([...roundedLandmarks]);
 
       // Store frame data
       allFramesDataRef.current.push({
         frame_number: frameCountRef.current,
         timestamp: Date.now(),
-        landmarks: paddedLandmarks,
+        landmarks: roundedLandmarks,
         detected_landmarks_count: allLandmarks.length,
         hand_count: handCount,
         face_count: faceCount,
       });
 
-      // Send both landmark data and video frame to backend
-      const landmarkData = {
-        type: "video_buffer",
-        // frames: [base64Frame], // Array of base64 encoded frames
-        timestamp: Date.now(),
-        buffer_id: `video_${Date.now()}`,
-        frame_count: frameCountRef.current,
-        landmarks: paddedLandmarks, // Include landmark data
-      };
+      // Send both landmark data and video frame to backend (when socket is open)
+      if (readyState === 1) {
+        const landmarkData = {
+          type: "prediction_request",
+          // frames: [base64Frame], // Array of base64 encoded frames
+          timestamp: Date.now(),
+          // buffer_id: `video_${Date.now()}`,
+          // frame_count: frameCountRef.current,
+          landmarks: roundedLandmarks, // Include landmark data
+        };
 
-      sendMessage(JSON.stringify(landmarkData));
+        sendMessage(JSON.stringify(landmarkData));
 
-      // Log landmark data being sent to backend for each frame
-      console.log("🚀 LANDMARK DATA SENT TO BACKEND:");
-      console.log(`Frame #${frameCountRef.current}:`, {
-        type: landmarkData.type,
-        timestamp: landmarkData.timestamp,
-        buffer_id: landmarkData.buffer_id,
-        frame_count: landmarkData.frame_count,
-        landmarks_length: landmarkData.landmarks.length,
-        landmarks_sample: landmarkData.landmarks.slice(0, 12), // Show first 12 values
-        landmarks_full: landmarkData.landmarks, // Full landmark array
-      });
-      console.log(
-        `✅ Data sent: ${paddedLandmarks.length} landmark values (${allLandmarks.length} detected landmarks)`,
-      );
-      console.log("================================");
+        // Log landmark data being sent to backend for each frame
+        console.log("🚀 LANDMARK DATA SENT TO BACKEND:");
+        console.log("landmarkData", landmarkData);
+
+        console.log("================================");
+      }
     }
   };
 

@@ -347,23 +347,17 @@ const HandLandMarks = () => {
       allLandmarksDataRef.current.push([...paddedLandmarks]);
 
       const landmarkData = {
-        type: "video_buffer",
-        frames: [base64Frame],
+        type: "prediction_request",
+        landmarks: allLandmarksDataRef,
         timestamp: Date.now(),
-        buffer_id: `video_${Date.now()}`,
       };
 
       sendMessage(JSON.stringify(landmarkData));
 
       console.log("🚀 FRAME DATA SENT TO BACKEND:");
-      console.log(`Frame #${frameCountRef.current}:`, {
-        type: landmarkData.type,
-        landmarkData: landmarkData,
-        timestamp: landmarkData.timestamp,
-        buffer_id: landmarkData.buffer_id,
-        frames_count: landmarkData.frames.length,
-        frame_size: base64Frame.length,
-      });
+
+      console.log("landmarkData", landmarkData);
+
       console.log(
         `✅ Data sent: ${landmarkData.frames.length} frame(s), Base64 size: ${base64Frame.length} characters`,
       );
@@ -422,7 +416,7 @@ const HandLandMarks = () => {
               ref={videoRef}
               playsInline
               muted
-              className={`border-2 border-gray-300 rounded-lg w-full ${isVideoMode ? "block" : "hidden"}`}
+              className={`border-2 border-gray-300 rounded-lg w-full `}
               style={{ maxWidth: "640px", height: "auto" }}
             />
             {!isVideoMode && (

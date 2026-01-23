@@ -1,12 +1,19 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import useWebSocket from "react-use-websocket";
+import {
+  HandLandmarker,
+  FilesetResolver,
+  DrawingUtils,
+} from "@mediapipe/tasks-vision";
 
 const CameraFeed = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastFrameTimeRef = useRef(0);
+  const handLandmarkerRef = useRef(null);
+  const drawingUtilsRef = useRef(null);
 
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
@@ -14,9 +21,10 @@ const CameraFeed = () => {
   const [lastPrediction, setLastPrediction] = useState(null);
   const [lastConfidence, setLastConfidence] = useState(null);
   const [sentence, setSentence] = useState("");
+  const [landmarksDetected, setLandmarksDetected] = useState(false);
 
   const frameCountRef = useRef(0);
-  const wsUrl = "https://asl-backend.octaloop.dev/ws";
+  const wsUrl = "wss://asl-backend.octaloop.dev/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -58,6 +66,35 @@ const CameraFeed = () => {
     }
   }, [lastMessage]);
 
+  // Initialize MediaPipe Hand Landmarker
+  useEffect(() => {
+    const initializeHandLandmarker = async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
+        );
+
+        const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU",
+          },
+          runningMode: "VIDEO",
+          numHands: 2,
+          minHandDetectionConfidence: 0.6,
+        });
+
+        handLandmarkerRef.current = handLandmarker;
+        console.log("MediaPipe Hand Landmarker initialized successfully");
+      } catch (error) {
+        console.error("Error initializing MediaPipe Hand Landmarker:", error);
+      }
+    };
+
+    initializeHandLandmarker();
+  }, []);
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -70,7 +107,24 @@ const CameraFeed = () => {
 
         // Start capturing frames after camera is ready
         videoRef.current.onloadedmetadata = () => {
-          startFrameCapture();
+          // Ensure video is playing
+          videoRef.current
+            .play()
+            .then(() => {
+              console.log("Video playing successfully");
+              // Match canvas to video size
+              if (videoRef.current.videoWidth && videoRef.current.videoHeight) {
+                canvasRef.current.width = videoRef.current.videoWidth;
+                canvasRef.current.height = videoRef.current.videoHeight;
+                console.log(
+                  `Canvas resized to: ${canvasRef.current.width}x${canvasRef.current.height}`,
+                );
+              }
+              startFrameCapture();
+            })
+            .catch((err) => {
+              console.error("Error playing video:", err);
+            });
         };
       }
     } catch (error) {
@@ -115,64 +169,145 @@ const CameraFeed = () => {
   };
 
   const captureFrameLoop = () => {
+    const canvas = canvasRef.current;
     const video = videoRef.current;
 
-    // Check if camera is still active
-    if (!video || !isCameraActive) {
-      console.log("Frame loop stopped - camera inactive");
+    // Check if we should continue
+    if (!canvas || !video || !video.srcObject) {
+      console.log("Frame loop stopped - missing refs or stream");
       return;
     }
+
+    // Check if video has data
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+      animationFrameRef.current = requestAnimationFrame(captureFrameLoop);
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+
+    // Always draw video to canvas for smooth display
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const now = performance.now();
     const elapsed = now - lastFrameTimeRef.current;
 
-    // Capture at 10 FPS (100ms between frames) to reduce bandwidth
+    // Process landmarks and send to backend at 10 FPS (every 100ms)
     if (elapsed >= 100) {
       lastFrameTimeRef.current = now;
-      captureFrame();
+      processLandmarks();
     }
 
     // Continue the loop
     animationFrameRef.current = requestAnimationFrame(captureFrameLoop);
   };
 
-  const captureFrame = () => {
+  const processLandmarks = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
+    const handLandmarker = handLandmarkerRef.current;
 
-    if (canvas && video && readyState === 1) {
-      // readyState 1 = OPEN
-      // Check if video is actually playing
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-        console.warn("Video not ready yet, readyState:", video.readyState);
-        return;
+    if (!canvas || !video) return;
+
+    const context = canvas.getContext("2d");
+
+    // Detect hand landmarks
+    let allLandmarks = [];
+    const startTimeMs = performance.now();
+
+    if (handLandmarker) {
+      try {
+        const handResults = handLandmarker.detectForVideo(video, startTimeMs);
+
+        // Process and draw hand landmarks
+        if (handResults.landmarks && handResults.landmarks.length > 0) {
+          setLandmarksDetected(true);
+
+          // Initialize drawing utils if not already done
+          if (!drawingUtilsRef.current) {
+            drawingUtilsRef.current = new DrawingUtils(context);
+          }
+
+          const drawingUtils = drawingUtilsRef.current;
+
+          // Collect all landmarks from all detected hands
+          handResults.landmarks.forEach((landmarks, handIndex) => {
+            // Draw landmarks and connections for each detected hand
+            drawingUtils.drawLandmarks(landmarks, {
+              radius: 5,
+              color: "#00FF00",
+              fillColor: "#FF0000",
+            });
+
+            drawingUtils.drawConnectors(
+              landmarks,
+              HandLandmarker.HAND_CONNECTIONS,
+              {
+                color: "#00FF00",
+                lineWidth: 2,
+              },
+            );
+
+            // Add each landmark to the array with hand index
+            landmarks.forEach((landmark, landmarkIndex) => {
+              allLandmarks.push({
+                type: "hand",
+                handIndex,
+                landmarkIndex,
+                x: landmark.x,
+                y: landmark.y,
+                z: landmark.z,
+              });
+            });
+          });
+
+          console.log("=== HAND LANDMARKS DETECTED ===");
+          console.log(`Total Hands: ${handResults.landmarks.length}`);
+          console.log(`Total Landmarks: ${allLandmarks.length}`);
+        } else {
+          setLandmarksDetected(false);
+        }
+      } catch (error) {
+        console.error("Error detecting hands:", error);
       }
+    }
 
-      const context = canvas.getContext("2d");
+    // Increment frame counter
+    frameCountRef.current += 1;
+    setFrameCount(frameCountRef.current);
 
-      // Clear canvas before drawing
-      context.clearRect(0, 0, canvas.width, canvas.height);
+    // Flatten landmarks data to array format [x, y, z, x, y, z, ...]
+    const flattenedLandmarks = allLandmarks.flatMap((landmark) => [
+      landmark.x,
+      landmark.y,
+      landmark.z,
+    ]);
 
-      // Draw video frame to canvas
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Ensure exactly 225 values (pad with zeros if needed, truncate if exceeds)
+    // Round each value to 2 decimal places
+    const paddedLandmarks = new Array(225).fill(0);
 
-      // Convert canvas to base64
-      const dataURL = canvas.toDataURL("image/jpeg", 0.7);
-      const base64Frame = dataURL.split(",")[1]; // Remove data:image/jpeg;base64, prefix
+    console.log("paddedLandmarks", flattenedLandmarks);
 
-      // Increment frame counter
-      frameCountRef.current += 1;
-      setFrameCount(frameCountRef.current);
+    for (let i = 0; i < Math.min(flattenedLandmarks.length, 225); i++) {
+      paddedLandmarks[i] = Math.round(flattenedLandmarks[i] * 100) / 100;
+    }
 
-      // Send base64 frame to backend
+    // Only send to backend if we have landmarks and WebSocket is open
+    if (flattenedLandmarks.length > 0 && readyState === 1) {
       const message = {
-        type: "hand_landmarks", // or "prediction_request"
-        landmarks: base64Frame, // Send as base64 string
+        type: "prediction_request",
+        landmarks: paddedLandmarks,
         timestamp: Date.now(),
+        // frame_count: frameCountRef.current,
+        // detected_landmarks_count: allLandmarks.length,
       };
 
       sendMessage(JSON.stringify(message));
-      console.log(`Frame #${frameCountRef.current} sent to backend`);
+      console.log(`✅ Frame #${paddedLandmarks} - Landmarks sent to backend`);
+    } else if (flattenedLandmarks.length === 0) {
+      console.log(`⚠️ Frame #${frameCountRef.current} - No landmarks detected`);
     }
   };
 
@@ -218,24 +353,36 @@ const CameraFeed = () => {
               {connectionStatus}
             </span>
           </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm">Landmarks: </span>
+            <span
+              className={`text-sm font-semibold ${
+                landmarksDetected ? "text-green-500" : "text-gray-500"
+              }`}
+            >
+              {landmarksDetected ? "Detected" : "None"}
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="flex flex-col gap-4">
         {/* Video Display */}
-        <div className="relative">
+        <div className="relative" style={{ maxWidth: "640px" }}>
+          <canvas
+            ref={canvasRef}
+            width="1280"
+            height="720"
+            className="border-2 border-gray-300 rounded-lg w-full"
+            style={{ width: "100%", height: "auto", display: "block" }}
+          />
           <video
             ref={videoRef}
             autoPlay
             playsInline
-            className="border-2 border-gray-300 rounded-lg w-full"
-            style={{ maxWidth: "640px", height: "auto" }}
-          />
-          <canvas
-            ref={canvasRef}
-            width="640"
-            height="480"
-            className="hidden" // Hide canvas, we're just using it for capture
+            muted
+            style={{ display: "none" }}
           />
           {!isCameraActive && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg">
