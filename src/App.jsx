@@ -11,8 +11,8 @@ const App = () => {
       <h1>Only Hands</h1>
       <CameraDetection />
 
-      <h1>Hand and pose 225</h1>
-      <HandPoseLandsMarks />
+      {/* <h1>Hand and pose 225</h1>
+      <HandPoseLandsMarks /> */}
       {/* <CameraFeed /> */}
       {/* <HandLandMarks /> */}
     </div>

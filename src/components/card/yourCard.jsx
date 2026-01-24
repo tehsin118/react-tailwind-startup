@@ -33,8 +33,8 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
-  const wsUrl = "https://b4796476f379.ngrok-free.app/ws";
+  const wsUrl = "wss://asl-backend.octaloop.dev/ws";
+  // const wsUrl = "https://b4796476f379.ngrok-free.app/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
