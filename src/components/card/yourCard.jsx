@@ -28,6 +28,7 @@ const CameraDetection = () => {
   const [isProcessingComplete, setIsProcessingComplete] = useState(false);
   const [distanceStatus, setDistanceStatus] = useState("unknown"); // "good", "too-close", "too-far", "unknown"
   const [handSize, setHandSize] = useState(0); // Percentage of frame height
+  const [formedSentence, setFormedSentence] = useState(null); // Store API response
   const frameCountRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const fpsCounterRef = useRef(0);
@@ -35,10 +36,11 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  const wsUrl = "wss://asl-backend.octaloop.dev/ws";
-  // const wsUrl = "https://b4796476f379.ngrok-free.app/ws";
+  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
+  const wsUrl = "https://bd109d629a99.ngrok-free.app";
+  // const wsUrl = "https://bd109d629a99.ngrok-free.app/ws";
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
+  const { sendMessage, lastMessage, readyState } = useWebSocket(`${wsUrl}/ws`, {
     onOpen: () => {
       console.log("WebSocket connected");
       setConnectionStatus("Connected");
@@ -304,6 +306,32 @@ const CameraDetection = () => {
     }
   };
 
+  const handleGetSentence = async () => {
+    try {
+      const response = await fetch(`${wsUrl}/api/form-sentence`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clear_after_formation: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Formed sentence response:", data);
+      setFormedSentence(data);
+    } catch (error) {
+      console.error("Error forming sentence:", error);
+      setFormedSentence({ error: error.message });
+    }
+  };
+
   const stopCamera = () => {
     if (videoRef.current) {
       // Stop camera stream if active
@@ -345,6 +373,8 @@ const CameraDetection = () => {
         allFramesDataRef.current = [];
         setIsProcessingComplete(false);
       }
+
+      handleGetSentence();
     }
   };
 
@@ -941,6 +971,7 @@ const CameraDetection = () => {
                   Stop Camera
                 </button>
               )}
+              {/* <button onClick={handleGetSentence}>as</button> */}
             </div>
           )}
         </div>
@@ -951,6 +982,41 @@ const CameraDetection = () => {
             <span key={idx}>{message ? message.data?.message : null}</span>
           ))}
         </ul>
+
+        {/* Display Formed Sentence Results */}
+        {formedSentence && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-indigo-300">
+            <h3 className="text-lg font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+              <Icon icon="mdi:text-box-check" className="text-2xl" />
+              Formed Sentence
+            </h3>
+            {formedSentence.error ? (
+              <div className="bg-red-100 border border-red-300 rounded p-3">
+                <p className="text-red-700 font-semibold">Error:</p>
+                <p className="text-red-600">{formedSentence.error}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="bg-white p-3 rounded shadow-sm">
+                  <p className="text-sm text-gray-600 mb-1">Sentence:</p>
+                  <p className="text-xl font-bold text-gray-800">
+                    {formedSentence.sentence ||
+                      formedSentence.formed_sentence ||
+                      JSON.stringify(formedSentence)}
+                  </p>
+                </div>
+                {formedSentence.confidence && (
+                  <div className="bg-white p-3 rounded shadow-sm">
+                    <p className="text-sm text-gray-600 mb-1">Confidence:</p>
+                    <p className="text-lg font-semibold text-green-600">
+                      {(formedSentence.confidence * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
