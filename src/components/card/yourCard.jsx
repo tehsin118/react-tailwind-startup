@@ -29,6 +29,7 @@ const CameraDetection = () => {
   const [distanceStatus, setDistanceStatus] = useState("unknown"); // "good", "too-close", "too-far", "unknown"
   const [handSize, setHandSize] = useState(0); // Percentage of frame height
   const [formedSentence, setFormedSentence] = useState(null); // Store API response
+  const [shouldConnectWS, setShouldConnectWS] = useState(false); // Control WebSocket connection
   const frameCountRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const fpsCounterRef = useRef(0);
@@ -36,25 +37,28 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
-  const wsUrl = "https://bd109d629a99.ngrok-free.app";
+  const wsUrl = "wss://asl-backend.octaloop.dev";
+  // const wsUrl = "https://bd109d629a99.ngrok-free.app";
   // const wsUrl = "https://bd109d629a99.ngrok-free.app/ws";
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket(`${wsUrl}/ws`, {
-    onOpen: () => {
-      console.log("WebSocket connected");
-      setConnectionStatus("Connected");
+  const { sendMessage, lastMessage, readyState } = useWebSocket(
+    shouldConnectWS ? `${wsUrl}/ws` : null, // Only connect when shouldConnectWS is true
+    {
+      onOpen: () => {
+        console.log("WebSocket connected");
+        setConnectionStatus("Connected");
+      },
+      onClose: () => {
+        console.log("WebSocket disconnected");
+        setConnectionStatus("Disconnected");
+      },
+      onError: (error) => {
+        console.error("WebSocket error:", error);
+        setConnectionStatus("Error");
+      },
+      shouldReconnect: () => shouldConnectWS, // Only reconnect if we want connection
     },
-    onClose: () => {
-      console.log("WebSocket disconnected");
-      setConnectionStatus("Disconnected");
-    },
-    onError: (error) => {
-      console.error("WebSocket error:", error);
-      setConnectionStatus("Error");
-    },
-    shouldReconnect: () => true,
-  });
+  );
 
   useEffect(() => {
     // Listen for messages from WebSocket
@@ -175,6 +179,10 @@ const CameraDetection = () => {
 
   const startCamera = async () => {
     try {
+      // Connect WebSocket when starting camera
+      setShouldConnectWS(true);
+      setFormedSentence(null); // Clear previous sentence
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
       });
@@ -200,11 +208,16 @@ const CameraDetection = () => {
       alert(
         "Failed to access camera. Please ensure camera permissions are granted.",
       );
+      setShouldConnectWS(false); // Disconnect if camera fails
     }
   };
 
   const playVideo = () => {
     if (videoRef.current && isVideoMode) {
+      // Connect WebSocket when playing video
+      setShouldConnectWS(true);
+      setFormedSentence(null); // Clear previous sentence
+
       // Reset data collection
       allLandmarksDataRef.current = [];
       allFramesDataRef.current = [];
@@ -374,6 +387,10 @@ const CameraDetection = () => {
         setIsProcessingComplete(false);
       }
 
+      // Disconnect WebSocket when stopping camera
+      setShouldConnectWS(false);
+
+      // Call API to form sentence
       handleGetSentence();
     }
   };
