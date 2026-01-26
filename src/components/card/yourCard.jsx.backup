@@ -26,8 +26,6 @@ const CameraDetection = () => {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [actualFPS, setActualFPS] = useState(0);
   const [isProcessingComplete, setIsProcessingComplete] = useState(false);
-  const [distanceStatus, setDistanceStatus] = useState("unknown"); // "good", "too-close", "too-far", "unknown"
-  const [handSize, setHandSize] = useState(0); // Percentage of frame height
   const frameCountRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const fpsCounterRef = useRef(0);
@@ -35,8 +33,8 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  const wsUrl = "wss://asl-backend.octaloop.dev/ws";
-  // const wsUrl = "https://b4796476f379.ngrok-free.app/ws";
+  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
+  const wsUrl = "https://f5c1b567deae.ngrok-free.app/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -420,37 +418,12 @@ const CameraDetection = () => {
 
             const drawingUtils = drawingUtilsRef.current;
 
+            // ONLY use the FIRST hand detected to ensure we send exactly 63 landmarks
+            // Backend expects either 63 (one hand) or 225 (full body)
             const firstHandOnly = handResults.landmarks.slice(0, 1);
 
-            // Collect all landmarks from all detected hands
+            // Collect landmarks from the first hand only
             firstHandOnly.forEach((landmarks, handIndex) => {
-              // handResults.landmarks.forEach((landmarks, handIndex) => {
-
-              // Calculate hand bounding box to determine distance
-              const xCoords = landmarks.map((l) => l.x);
-              const yCoords = landmarks.map((l) => l.y);
-              const minX = Math.min(...xCoords);
-              const maxX = Math.max(...xCoords);
-              const minY = Math.min(...yCoords);
-              const maxY = Math.max(...yCoords);
-
-              const handWidth = maxX - minX;
-              const handHeight = maxY - minY;
-              const handSizePercent = Math.round(handHeight * 100);
-
-              // Update hand size state
-              setHandSize(handSizePercent);
-
-              // Determine distance status
-              // Optimal: hand height is 15-40% of frame
-              if (handSizePercent < 12) {
-                setDistanceStatus("too-far");
-              } else if (handSizePercent > 50) {
-                setDistanceStatus("too-close");
-              } else {
-                setDistanceStatus("good");
-              }
-
               // Draw landmarks and connections for each detected hand
               drawingUtils.drawLandmarks(landmarks, {
                 radius: 5,
@@ -465,32 +438,6 @@ const CameraDetection = () => {
                   color: "#00FF00",
                   lineWidth: 2,
                 },
-              );
-
-              // Draw distance feedback box
-              const boxColor =
-                handSizePercent < 12
-                  ? "#FF4444"
-                  : handSizePercent > 50
-                    ? "#FF8800"
-                    : "#00FF00";
-
-              context.strokeStyle = boxColor;
-              context.lineWidth = 3;
-              context.strokeRect(
-                minX * canvas.width,
-                minY * canvas.height,
-                handWidth * canvas.width,
-                handHeight * canvas.height,
-              );
-
-              // Display distance text
-              context.fillStyle = boxColor;
-              context.font = "16px Arial";
-              context.fillText(
-                `Hand: ${handSizePercent}%`,
-                minX * canvas.width,
-                minY * canvas.height - 10,
               );
 
               // Add each landmark to the array with hand index
@@ -508,7 +455,7 @@ const CameraDetection = () => {
             });
 
             console.log(
-              `Total Hands Detected: ${handResults.landmarks.length}`,
+              `Total Hands Detected: ${handResults.landmarks.length} | Using First Hand Only (63 landmarks)`,
             );
           }
         } catch (error) {
@@ -593,8 +540,6 @@ const CameraDetection = () => {
       // Update detection status
       if (allLandmarks.length === 0) {
         setLandmarksDetected(false);
-        setDistanceStatus("unknown");
-        setHandSize(0);
       }
 
       // Increment frame counter
@@ -617,7 +562,7 @@ const CameraDetection = () => {
       console.log(`Frame: #${frameCountRef.current} | FPS: ${actualFPS}`);
       console.log(`Processing Time: ${deltaTime.toFixed(1)}ms`);
       console.log(
-        `Hand landmarks: ${handCount} | Face landmarks: ${faceCount}`,
+        `Hand landmarks count: ${handCount} | Face landmarks: ${faceCount}`,
       );
       console.log(`Total landmarks: ${allLandmarks.length}`);
       console.log(`Flattened array length: ${flattenedLandmarks.length}`);
@@ -723,76 +668,8 @@ const CameraDetection = () => {
                 {landmarksDetected ? "Detected" : "None"}
               </span>
             </div>
-            {landmarksDetected && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Distance: </span>
-                <span
-                  className={`text-sm font-semibold ${
-                    distanceStatus === "good"
-                      ? "text-green-500"
-                      : distanceStatus === "too-far"
-                        ? "text-red-500"
-                        : distanceStatus === "too-close"
-                          ? "text-orange-500"
-                          : "text-gray-500"
-                  }`}
-                >
-                  {distanceStatus === "good"
-                    ? `✓ Good (${handSize}%)`
-                    : distanceStatus === "too-far"
-                      ? `⚠ Too Far (${handSize}%)`
-                      : distanceStatus === "too-close"
-                        ? `⚠ Too Close (${handSize}%)`
-                        : "Unknown"}
-                </span>
-              </div>
-            )}
           </div>
         </div>
-
-        {/* Distance Guidance Alert */}
-        {landmarksDetected && distanceStatus !== "good" && (
-          <div
-            className={`p-4 rounded-lg border-2 ${
-              distanceStatus === "too-far"
-                ? "bg-red-50 border-red-300"
-                : "bg-orange-50 border-orange-300"
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <Icon
-                icon="mdi:alert-circle"
-                className={`text-2xl ${
-                  distanceStatus === "too-far"
-                    ? "text-red-600"
-                    : "text-orange-600"
-                }`}
-              />
-              <div>
-                <h3
-                  className={`font-semibold ${
-                    distanceStatus === "too-far"
-                      ? "text-red-800"
-                      : "text-orange-800"
-                  }`}
-                >
-                  {distanceStatus === "too-far"
-                    ? "Move Closer to Camera"
-                    : "Move Away from Camera"}
-                </h3>
-                <p className="text-sm text-gray-700 mt-1">
-                  {distanceStatus === "too-far"
-                    ? "Your hand is too small in the frame. Move closer (recommended: 0.5-1.5 meters / 1.5-5 feet)."
-                    : "Your hand is too large in the frame. Move back slightly for better detection."}
-                </p>
-                <p className="text-xs text-gray-600 mt-2">
-                  <strong>Optimal:</strong> Hand should be 15-40% of frame
-                  height. Current: {handSize}%
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex flex-col gap-4">
           <div className="relative">
