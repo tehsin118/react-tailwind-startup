@@ -7,7 +7,7 @@ import {
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
 
-const CameraDetection = () => {
+const CameraDetectionBackup = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const intervalRef = useRef(null);
@@ -33,8 +33,8 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  // const wsUrl = "wss://asl-backend.octaloop.dev/ws";
-  const wsUrl = "https://f5c1b567deae.ngrok-free.app/ws";
+  const wsUrl = "wss://asl-backend.octaloop.dev/ws";
+  // const wsUrl = "https://f5c1b567deae.ngrok-free.app/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => {
@@ -833,4 +833,4 @@ const CameraDetection = () => {
   );
 };
 
-export default CameraDetection;
+export default CameraDetectionBackup;

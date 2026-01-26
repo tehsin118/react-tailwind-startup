@@ -37,8 +37,8 @@ const CameraDetection = () => {
   const allLandmarksDataRef = useRef([]); // Store all landmarks from all frames
   const allFramesDataRef = useRef([]); // Store all frame data
 
-  const wsUrl = "wss://asl-backend.octaloop.dev";
-  // const wsUrl = "https://bd109d629a99.ngrok-free.app";
+  const wsUrl = "https://asl-backend.octaloop.dev";
+  // const wsUrl = "https://9707db3731bf.ngrok-free.app";
   // const wsUrl = "https://bd109d629a99.ngrok-free.app/ws";
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(
@@ -692,7 +692,10 @@ const CameraDetection = () => {
       });
 
       // Send both landmark data and video frame to backend (when socket is open)
-      if (readyState === 1) {
+      console.log("readyState", readyState);
+
+      if (readyState) {
+        console.log("def");
         const landmarkData = {
           type: "prediction_request",
           // frames: [base64Frame], // Array of base64 encoded frames
@@ -703,9 +706,9 @@ const CameraDetection = () => {
         };
 
         sendMessage(JSON.stringify(landmarkData));
+        console.log("🚀 LANDMARK DATA SENT TO BACKEND:");
 
         // Log landmark data being sent to backend for each frame
-        console.log("🚀 LANDMARK DATA SENT TO BACKEND:");
         console.log("landmarkData", landmarkData);
 
         console.log("================================");

@@ -4,11 +4,13 @@ import CameraFeed from "./components/asl/cameraFeed";
 import HandLandMarks from "./components/handLandMarks";
 import CameraDetection from "./components/card/yourCard";
 import HandPoseLandsMarks from "./components/handPoseLandmarks";
+import CameraDetectionBackup from "./components/card/yourCards";
 // import CameraDetection from "./components/camera";
 const App = () => {
   return (
     <div className="bg-[#fff] h-screen overflow-auto p-32">
       <h1>Only Hands</h1>
+      {/* <CameraDetectionBackup /> */}
       <CameraDetection />
 
       {/* <h1>Hand and pose 225</h1>
